@@ -165,3 +165,19 @@ test.describe('play', () => {
     await expect(page.locator('#hud-lives')).toHaveText('◆◆');
   });
 });
+
+test.describe('portrait phone', () => {
+  test.use({ viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true });
+
+  test('turns the board to fill a Galaxy S23 screen and taps still turn the right mirror', async ({ page }) => {
+    await page.tap('#title-play');
+    await page.tap('.level-button[data-level="1"]');
+    const corner = { x: 0, y: 7 };
+    const before = await mirrorRotation(page, corner);
+    const point = await page.evaluate((tile) => (window as any).__deflektor.tileToClient(tile), corner);
+    // Rotated a quarter turn, the bottom-left corner of the board sits at the top-left of the screen.
+    expect(point.y).toBeLessThan(300);
+    await page.touchscreen.tap(point.x, point.y);
+    await expect.poll(() => mirrorRotation(page, corner)).toBe((before + 1) % 16);
+  });
+});

@@ -1,5 +1,4 @@
 import type { Board, Point } from '../engine/types';
-import type { BoardLayout } from '../render/layout';
 import { mirrorInDirection, startingMirror } from './cursor';
 
 const HOLD_DELAY_MS = 280;
@@ -21,7 +20,10 @@ const COUNTER_CLOCKWISE_KEYS = new Set(['KeyZ']);
 export interface ControlTarget {
   isPlaying(): boolean;
   board(): Board;
-  layout(): BoardLayout;
+  /** The tile under a point on the canvas (the board may be drawn rotated). */
+  tileAtScreen(point: Point): Point | undefined;
+  /** Maps an on-screen direction to the board's axes. */
+  screenDirectionToBoard(step: Point): Point;
   rotate(tile: Point, steps: number): void;
   togglePause(): void;
   toggleMute(): void;
@@ -100,7 +102,7 @@ export class Controls {
     if (!this.target.isPlaying()) return;
     if (event.code in CURSOR_KEYS) {
       event.preventDefault();
-      this.moveCursor(CURSOR_KEYS[event.code]);
+      this.moveCursor(this.target.screenDirectionToBoard(CURSOR_KEYS[event.code]));
     } else if (CLOCKWISE_KEYS.has(event.code) || COUNTER_CLOCKWISE_KEYS.has(event.code)) {
       event.preventDefault();
       if (event.repeat) return;
@@ -136,7 +138,7 @@ export class Controls {
   private playerMirrorAt(event: MouseEvent): Point | undefined {
     if (!this.target.isPlaying()) return undefined;
     const bounds = this.canvas.getBoundingClientRect();
-    const tile = this.target.layout().tileAtPixel({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    const tile = this.target.tileAtScreen({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
     if (!tile) return undefined;
     const piece = this.target.board().tiles[tile.y][tile.x];
     return piece.kind === 'mirror' && !piece.auto ? tile : undefined;

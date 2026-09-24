@@ -49,7 +49,8 @@ export class App {
     this.controls = new Controls(renderer.canvas, {
       isPlaying: () => this.screen === 'playing' && this.game.phase === 'playing',
       board: () => this.game.board,
-      layout: () => this.renderer.layout,
+      tileAtScreen: (point) => this.renderer.tileAtScreen(point),
+      screenDirectionToBoard: (step) => this.renderer.screenDirectionToBoard(step),
       rotate: (tile, steps) => this.game.rotateMirror(tile, steps),
       togglePause: () => this.togglePause(),
       toggleMute: () => this.toggleMute(),
@@ -89,7 +90,7 @@ export class App {
 
   tileToClient(tile: Point): Point {
     const bounds = this.renderer.canvas.getBoundingClientRect();
-    const center = this.renderer.layout.tileCenter(tile);
+    const center = this.renderer.tileCenterOnScreen(tile);
     return { x: bounds.left + center.x, y: bounds.top + center.y };
   }
 

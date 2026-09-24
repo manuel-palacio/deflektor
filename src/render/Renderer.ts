@@ -6,7 +6,7 @@ import type { Point } from '../engine/types';
 import { BeamView } from './BeamView';
 import { BoardView } from './BoardView';
 import { Effects } from './Effects';
-import { BoardLayout } from './layout';
+import { BoardLayout, placeBoard } from './layout';
 import { PALETTE } from './palette';
 import { getGlowTexture } from './textures';
 
@@ -21,7 +21,10 @@ interface Dust {
 /** Owns the Pixi application and turns game state and events into pictures. */
 export class Renderer {
   layout!: BoardLayout;
+  /** Turns and places the board (rotated a quarter on portrait screens); `world` inside it shakes. */
+  private readonly frame = new Container();
   private readonly world = new Container();
+  private rotated = false;
   private readonly board = new BoardView();
   private readonly beam = new BeamView();
   private readonly effects = new Effects();
@@ -68,9 +71,29 @@ export class Renderer {
 
   /** Recomputes the layout for the current canvas size and HUD height. */
   relayout(): void {
-    this.layout = new BoardLayout(this.app.screen.width, this.app.screen.height, this.reservedTop());
+    const placement = placeBoard(this.app.screen.width, this.app.screen.height, this.reservedTop());
+    this.layout = placement.layout;
+    this.rotated = placement.rotated;
+    this.frame.rotation = placement.rotated ? Math.PI / 2 : 0;
+    this.frame.position.set(placement.offset.x, placement.offset.y);
     this.paintBackground();
     if (this.game) this.board.build(this.game.board, this.layout);
+  }
+
+  /** The board tile under a point on the canvas, if any. */
+  tileAtScreen(point: Point): Point | undefined {
+    return this.layout.tileAtPixel(this.frame.toLocal(point));
+  }
+
+  /** Where a tile's centre appears on the canvas. */
+  tileCenterOnScreen(tile: Point): Point {
+    const { x, y } = this.frame.toGlobal(this.layout.tileCenter(tile));
+    return { x, y };
+  }
+
+  /** Converts a direction pressed on screen (e.g. an arrow key) into the board's own axes. */
+  screenDirectionToBoard(step: Point): Point {
+    return this.rotated ? { x: step.y, y: -step.x } : step;
   }
 
   handle(event: GameEvent, game: Game): void {
@@ -129,7 +152,8 @@ export class Renderer {
     const bloom = new AdvancedBloomFilter({ threshold: 0.3, bloomScale: 1.1, brightness: 1, blur: 6, quality: 5 });
     this.world.filters = [bloom];
     this.world.addChild(this.board.container, this.beam.container, this.effects.container);
-    this.app.stage.addChild(this.background, this.createDust(), this.world, this.flash);
+    this.frame.addChild(this.world);
+    this.app.stage.addChild(this.background, this.createDust(), this.frame, this.flash);
     this.app.renderer.on('resize', () => this.relayout());
   }
 

@@ -497,27 +497,6 @@ h2 {
   }
 }
 
-#rotate-hint {
-  display: none;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: max(18px, env(safe-area-inset-bottom));
-  text-align: center;
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-@media (orientation: portrait) and (max-width: 600px) {
-  #hud:not([hidden]) ~ #rotate-hint {
-    display: block;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .screen {
     animation: none;

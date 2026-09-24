@@ -45,3 +45,24 @@ export class BoardLayout {
     return inside ? { x, y } : undefined;
   }
 }
+
+/** Where the board goes on screen: its layout in board space, and whether it is turned a quarter clockwise. */
+export interface BoardPlacement {
+  layout: BoardLayout;
+  rotated: boolean;
+  /** Screen position of the board space's origin. */
+  offset: Point;
+}
+
+/**
+ * On tall screens (portrait phones) the wide 15 x 9 board is turned 90° so it can use the height;
+ * whichever orientation gives bigger tiles wins.
+ */
+export function placeBoard(width: number, height: number, reservedTop: number): BoardPlacement {
+  const upright = new BoardLayout(width, height, reservedTop);
+  const turned = new BoardLayout(height - reservedTop, width, 0);
+  if (turned.tileSize > upright.tileSize) {
+    return { layout: turned, rotated: true, offset: { x: width, y: reservedTop } };
+  }
+  return { layout: upright, rotated: false, offset: { x: 0, y: 0 } };
+}

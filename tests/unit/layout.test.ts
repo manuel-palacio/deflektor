@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BoardLayout } from '../../src/render/layout';
+import { BoardLayout, placeBoard } from '../../src/render/layout';
 
 describe('BoardLayout', () => {
   const layout = new BoardLayout(1600, 1000, 100);
@@ -24,5 +24,28 @@ describe('BoardLayout', () => {
 
   it('finds no tile for pixels outside the board', () => {
     expect(layout.tileAtPixel({ x: 0, y: 0 })).toBeUndefined();
+  });
+});
+
+describe('placeBoard', () => {
+  it('keeps the board upright on landscape screens', () => {
+    const placement = placeBoard(1280, 800, 60);
+    expect(placement.rotated).toBe(false);
+    expect(placement.offset).toEqual({ x: 0, y: 0 });
+  });
+
+  it('turns the board on a portrait phone, giving much bigger tiles', () => {
+    const upright = new BoardLayout(390, 844, 110);
+    const placement = placeBoard(390, 844, 110);
+    expect(placement.rotated).toBe(true);
+    expect(placement.layout.tileSize).toBeGreaterThan(upright.tileSize * 1.5);
+    expect(placement.offset).toEqual({ x: 390, y: 110 });
+  });
+
+  it('fits the turned board inside the screen below the HUD', () => {
+    const { layout } = placeBoard(390, 844, 110);
+    // Board space x runs down the screen and board space y runs right-to-left across it.
+    expect(layout.originX + layout.boardWidth).toBeLessThanOrEqual(844 - 110);
+    expect(layout.originY + layout.boardHeight).toBeLessThanOrEqual(390);
   });
 });
