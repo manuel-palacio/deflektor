@@ -101,6 +101,18 @@ test.describe('controls', () => {
     await expect.poll(() => mirrorRotation(page, nearestMirror)).toBe(before);
   });
 
+  test('restarting from the pause menu starts the level over without costing a life', async ({ page }) => {
+    await startLevel(page, 1);
+    await clickTile(page, cornerMirror);
+    await page.keyboard.press('Escape');
+    await page.click('#pause-restart');
+    await expect(page.locator('#screen-pause')).toBeHidden();
+    const state = await gameState(page);
+    expect(state.lives).toBe(3);
+    expect(state.phase).toBe('playing');
+    expect(await page.evaluate(() => (window as any).__deflektor.currentGame.stats.rotations)).toBe(0);
+  });
+
   test('Escape pauses the game and freezes the energy drain', async ({ page }) => {
     await startLevel(page, 1);
     await page.keyboard.press('Escape');
@@ -157,7 +169,8 @@ test.describe('play', () => {
     await startLevel(page, 1);
     // The corner mirror at rotation 0 bounces the leftward beam straight back into the laser.
     await turnMirrorTo(page, { x: 0, y: 7 }, 0);
-    await expect(page.locator('#message-title')).toHaveText('Overload!', { timeout: 10_000 });
+    await expect(page.locator('#message-title')).toHaveText('Feedback overload', { timeout: 10_000 });
+    await expect(page.locator('#message-detail')).toContainText('reflected back into the laser');
     await page.click('#message-primary');
     const state = await gameState(page);
     expect(state.lives).toBe(2);

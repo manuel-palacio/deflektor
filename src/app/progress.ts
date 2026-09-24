@@ -3,12 +3,21 @@ export interface Progress {
   unlockedLevels: number;
   highScore: number;
   muted: boolean;
+  trainingDone: boolean;
+  /** Best single-level score per level number (1-based). */
+  bestLevelScores: Record<number, number>;
 }
 
 type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 const STORAGE_KEY = 'deflektor.progress.v1';
-const DEFAULT_PROGRESS: Progress = { unlockedLevels: 1, highScore: 0, muted: false };
+const DEFAULT_PROGRESS: Progress = {
+  unlockedLevels: 1,
+  highScore: 0,
+  muted: false,
+  trainingDone: false,
+  bestLevelScores: {},
+};
 
 /** Persists campaign progress. Storage failures (private mode, quota) degrade to an in-memory session. */
 export class ProgressStore {
@@ -36,6 +45,18 @@ export class ProgressStore {
 
   setMuted(muted: boolean): void {
     this.save({ muted });
+  }
+
+  completeTraining(): void {
+    this.save({ trainingDone: true });
+  }
+
+  /** Stores a level result; returns true when it beats the previous best for that level. */
+  recordLevelScore(levelNumber: number, score: number): boolean {
+    const previous = this.progress.bestLevelScores[levelNumber];
+    if (previous !== undefined && score <= previous) return false;
+    this.save({ bestLevelScores: { ...this.progress.bestLevelScores, [levelNumber]: score } });
+    return true;
   }
 
   private read(): Progress {

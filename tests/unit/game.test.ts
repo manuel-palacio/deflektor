@@ -95,7 +95,7 @@ describe('Game', () => {
     game.tick(0.016);
     expect(game.phase).toBe('levelComplete');
     const bonus = Math.round(game.energy * RULES.energyBonus);
-    expect(events).toContainEqual({ type: 'levelComplete', bonus });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'levelComplete', bonus }));
     expect(game.score).toBe(RULES.podScore + bonus);
   });
 
@@ -155,7 +155,7 @@ describe('Game', () => {
     expect(game.overload).toBeCloseTo(0.5 * RULES.overloadRisePerSecond);
     for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
     expect(game.phase).toBe('lifeLost');
-    expect(events).toContainEqual({ type: 'lifeLost', reason: 'overload' });
+    expect(events).toContainEqual({ type: 'lifeLost', reason: 'mine' });
   });
 
   it('builds overload when the beam is reflected back into the emitter', () => {
@@ -204,5 +204,102 @@ describe('Game', () => {
   it('can start a run at a later level', () => {
     const game = new Game([podThenReceiver, secondLevel], { startLevel: 1, chargeSeconds: 0 });
     expect(game.levelIndex).toBe(1);
+  });
+
+  it('explains a lost life caused by feeding the beam back into the laser', () => {
+    const game = new Game([level(['E..0', '', '', '', '', '', '', '', 'R'])], NO_CHARGE);
+    const events = recordEvents(game);
+    for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
+    expect(events).toContainEqual({ type: 'lifeLost', reason: 'feedback' });
+  });
+
+  it('counts turns and firing time, and reports them when the level is complete', () => {
+    const game = new Game([level(['E..8.....R'])], { chargeSeconds: 1 });
+    const events = recordEvents(game);
+    game.rotateMirror({ x: 3, y: 0 }, 1);
+    game.rotateMirror({ x: 3, y: 0 }, -1);
+    game.tick(1);
+    game.tick(0.25);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'levelComplete', stats: { rotations: 2, seconds: 0.25, podsDestroyed: 0 } }),
+    );
+  });
+
+  it('announces when a turn newly lines the beam up on a pod', () => {
+    const game = new Game([level(['E..0', '', '', '...o', '', '', '', '', 'R'])], NO_CHARGE);
+    const events = recordEvents(game);
+    game.rotateMirror({ x: 3, y: 0 }, 12);
+    expect(events).toContainEqual({ type: 'beamConnected', tile: { x: 3, y: 3 } });
+    game.rotateMirror({ x: 3, y: 0 }, 4);
+    expect(events.filter((event) => event.type === 'beamConnected')).toHaveLength(1);
+  });
+
+  it('restarts a level without costing a life and forgets that level’s score', () => {
+    const game = new Game([podThenReceiver], NO_CHARGE);
+    game.tick(0.016);
+    expect(game.score).toBe(RULES.podScore);
+    game.restartLevel();
+    expect(game.score).toBe(0);
+    expect(game.lives).toBe(RULES.startingLives);
+    expect(game.podsRemaining).toBe(1);
+  });
+
+  it('never runs out of lives in training', () => {
+    const game = new Game([mineLevel], { chargeSeconds: 0, unlimitedLives: true });
+    for (let life = 0; life < 5; life++) {
+      for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
+      game.continue();
+    }
+    expect(game.phase).toBe('playing');
+    expect(game.lives).toBe(RULES.startingLives);
+  });
+
+  describe('state transitions', () => {
+    it('ignores continue while a level is still being played', () => {
+      const game = new Game([podThenReceiver, secondLevel], NO_CHARGE);
+      game.continue();
+      expect(game.levelIndex).toBe(0);
+      expect(game.phase).toBe('playing');
+    });
+
+    it('can restart from the life-lost screen without losing a second life', () => {
+      const game = new Game([mineLevel], NO_CHARGE);
+      for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
+      expect(game.phase).toBe('lifeLost');
+      game.restartLevel();
+      expect(game.phase).toBe('playing');
+      expect(game.lives).toBe(RULES.startingLives - 1);
+    });
+
+    it('stays over after game over: neither continue nor restart revive the run', () => {
+      const game = new Game([mineLevel], NO_CHARGE);
+      for (let life = 0; life < RULES.startingLives; life++) {
+        for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
+        if (game.phase === 'lifeLost') game.continue();
+      }
+      game.continue();
+      game.restartLevel();
+      expect(game.phase).toBe('gameOver');
+    });
+
+    it('does not let mirrors turn once the level has ended', () => {
+      const game = new Game([level(['E..8.....R'])], NO_CHARGE);
+      game.tick(0.1);
+      expect(game.phase).toBe('levelComplete');
+      game.rotateMirror({ x: 3, y: 0 }, 1);
+      expect(game.board.tiles[0][3]).toMatchObject({ rotation: 8 });
+    });
+
+    it('resets meters, pods and statistics when a level restarts', () => {
+      const game = new Game([mineLevel], NO_CHARGE);
+      game.rotateMirror({ x: 0, y: 0 }, 1);
+      game.tick(0.5);
+      game.restartLevel();
+      expect({ energy: game.energy, overload: game.overload, stats: game.stats }).toEqual({
+        energy: 1,
+        overload: 0,
+        stats: { rotations: 0, seconds: 0, podsDestroyed: 0 },
+      });
+    });
   });
 });

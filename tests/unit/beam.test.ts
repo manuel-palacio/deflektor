@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reflectOffMirror, traceBeam } from '../../src/engine/beam';
+import { MAX_BEAM_POINTS, reflectOffMirror, traceBeam } from '../../src/engine/beam';
 import { board } from './helpers';
 
 // Beam coordinates are quarter-tile units from the board's top-left: tile (x, y) is centred on (2x + 1, 2y + 1).
@@ -134,5 +134,25 @@ describe('traceBeam', () => {
       kind: 'receiver',
       tile: { x: 0, y: 8 },
     });
+  });
+
+  it('terminates safely when the laser is sealed inside a box of reflecting bricks', () => {
+    const sealed = board(['#####', '#E.3#', '#...#', '#####', '', '', '', '', 'R']);
+    const trace = traceBeam(sealed);
+    expect(['emitter', 'loop']).toContain(trace.end.kind);
+    const points = trace.paths.reduce((total, path) => total + path.length, 0);
+    expect(points).toBeLessThanOrEqual(MAX_BEAM_POINTS);
+  });
+
+  it('caps pathological beams at a drawable length and reports them as loops', () => {
+    // A refractor between two purple walls with a slanted exit keeps the beam bouncing between walls.
+    const level = board(['###############', '.......*.......', '###############', 'E', '', '', '', '', 'R']);
+    level.tiles[1][7] = { kind: 'refractor', direction: 5 };
+    level.tiles[3][0] = { kind: 'empty' };
+    level.tiles[1][0] = { kind: 'emitter', direction: 4 };
+    const trace = traceBeam(level);
+    const points = trace.paths.reduce((total, path) => total + path.length, 0);
+    expect(points).toBeLessThanOrEqual(MAX_BEAM_POINTS);
+    expect(['loop', 'edge', 'emitter']).toContain(trace.end.kind);
   });
 });

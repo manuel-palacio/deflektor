@@ -25,10 +25,15 @@ describe('parseLevel', () => {
     expect(board.walls[0].slice(0, 4)).toEqual(['reflect', 'absorb', 'gate', 'none']);
   });
 
-  it('expands # and = in the tile map into whole-tile walls', () => {
-    const board = parseLevel(level(['E.#=R']));
+  it('expands #, = and + in the tile map into whole-tile walls', () => {
+    const board = parseLevel(level(['E.#=+R']));
     expect(board.tiles[0][2]).toEqual({ kind: 'empty' });
-    expect([board.walls[0][4], board.walls[1][5], board.walls[0][6]]).toEqual(['reflect', 'reflect', 'absorb']);
+    expect([board.walls[0][4], board.walls[1][5], board.walls[0][6], board.walls[1][9]]).toEqual([
+      'reflect',
+      'reflect',
+      'absorb',
+      'gate',
+    ]);
   });
 
   it('rejects maps with the wrong size', () => {
@@ -42,11 +47,11 @@ describe('parseLevel', () => {
   });
 
   it('requires exactly one emitter and one receiver', () => {
-    expect(() => parseLevel(level(['E.E.R']))).toThrow(/emitter/);
-    expect(() => parseLevel(level(['E....']))).toThrow(/receiver/);
+    expect(() => parseLevel(level(['E.E.R']))).toThrow(/one laser/);
+    expect(() => parseLevel(level(['E....']))).toThrow(/one receiver/);
   });
 
   it('requires fibre ends to come in pairs', () => {
-    expect(() => parseLevel(level(['E.T.R']))).toThrow(/fibre T/);
+    expect(() => parseLevel(level(['E.T.R']))).toThrow(/fibre 'T'/);
   });
 });

@@ -404,6 +404,15 @@ h2 {
   line-height: 1.4;
 }
 
+.error-list {
+  margin: 0;
+  padding-left: 20px;
+  text-align: left;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+  color: var(--red);
+}
+
 .message-detail strong {
   font-family: var(--display);
   color: var(--amber);

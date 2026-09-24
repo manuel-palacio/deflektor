@@ -20,6 +20,8 @@ import {
  */
 
 const MAX_CROSSINGS = 6000;
+/** A drawable beam never has more corners than this; anything longer is reported as a loop. */
+export const MAX_BEAM_POINTS = 400;
 /** Objects only react when the beam crosses the middle of their tile, not when it clips a corner. */
 const OBJECT_CORE_HALF_SIZE = 0.5;
 const TIE = 1e-9;
@@ -105,7 +107,7 @@ class BeamTracer {
   }
 
   run(): BeamTrace {
-    for (let crossing = 0; crossing < MAX_CROSSINGS; crossing++) {
+    for (let crossing = 0; crossing < MAX_CROSSINGS && this.pointCount < MAX_BEAM_POINTS; crossing++) {
       const end = this.advanceToNextCell();
       if (end) return { paths: this.paths, end };
     }
@@ -254,6 +256,10 @@ class BeamTracer {
     const path = this.paths[this.paths.length - 1];
     const last = path[path.length - 1];
     if (last.x !== point.x || last.y !== point.y) path.push(point);
+  }
+
+  private get pointCount(): number {
+    return this.paths.reduce((total, path) => total + path.length, 0);
   }
 }
 

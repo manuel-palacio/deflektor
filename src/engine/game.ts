@@ -17,6 +17,19 @@ export interface GameOptions {
   startLevel?: number;
   random?: () => number;
   chargeSeconds?: number;
+  /** Training: losing never costs a life. */
+  unlimitedLives?: boolean;
+}
+
+/** Why a life was lost: running dry, a mine overloading the laser, or the beam fed back into the laser. */
+export type LifeLostReason = 'energy' | 'mine' | 'feedback';
+
+/** How the current level has been played so far. */
+export interface LevelStats {
+  rotations: number;
+  /** Seconds the laser has been firing (charging time excluded). */
+  seconds: number;
+  podsDestroyed: number;
 }
 
 export type GamePhase = 'playing' | 'lifeLost' | 'levelComplete' | 'gameOver' | 'victory';
@@ -25,9 +38,11 @@ export type GameEvent =
   | { type: 'levelStarted'; index: number }
   | { type: 'podDestroyed'; tile: Point }
   | { type: 'mirrorRotated'; tile: Point }
+  /** A turn newly lined the beam up on a pod or the open receiver. */
+  | { type: 'beamConnected'; tile: Point }
   | { type: 'receiverOpened' }
-  | { type: 'levelComplete'; bonus: number }
-  | { type: 'lifeLost'; reason: 'energy' | 'overload' }
+  | { type: 'levelComplete'; bonus: number; stats: LevelStats }
+  | { type: 'lifeLost'; reason: LifeLostReason }
   | { type: 'gameOver' };
 
 type Listener = (event: GameEvent) => void;
@@ -46,11 +61,15 @@ export class Game {
 
   /** Seconds left before the laser starts to burn; while charging, the beam only shows where it will go. */
   chargeRemaining = 0;
+  stats: LevelStats = { rotations: 0, seconds: 0, podsDestroyed: 0 };
 
   private readonly listeners: Listener[] = [];
   private machinery!: Machinery;
   private readonly random: () => number;
   private readonly chargeSeconds: number;
+  private readonly unlimitedLives: boolean;
+  private scoreAtLevelStart = 0;
+  private overheatCause: 'mine' | 'feedback' = 'mine';
 
   constructor(
     private readonly levels: LevelDefinition[],
@@ -59,6 +78,7 @@ export class Game {
     this.levelIndex = options.startLevel ?? 0;
     this.random = options.random ?? Math.random;
     this.chargeSeconds = options.chargeSeconds ?? RULES.chargeSeconds;
+    this.unlimitedLives = options.unlimitedLives ?? false;
     this.loadLevel();
   }
 
@@ -72,6 +92,12 @@ export class Game {
 
   get isCharging(): boolean {
     return this.chargeRemaining > 0;
+  }
+
+  /** True when the beam currently ends on something the player wants: a pod, or the receiver once open. */
+  get isOnTarget(): boolean {
+    const end = this.beam.end.kind;
+    return end === 'pod' || (end === 'receiver' && this.receiverOpen);
   }
 
   get isBeamOverheating(): boolean {
@@ -91,6 +117,7 @@ export class Game {
       this.beam = traceBeam(this.board);
       return;
     }
+    this.stats.seconds += seconds;
     this.resolveBeam();
     if (this.phase !== 'playing') return;
     this.updateOverload(seconds);
@@ -101,9 +128,22 @@ export class Game {
   rotateMirror(tilePosition: Point, steps: number): void {
     const tile = tileAt(this.board, tilePosition);
     if (this.phase !== 'playing' || tile?.kind !== 'mirror' || tile.auto) return;
+    const wasOnTarget = this.isOnTarget ? endKey(this.beam) : undefined;
     tile.rotation = wrapDirection(tile.rotation + steps);
+    this.stats.rotations++;
     this.beam = traceBeam(this.board);
     this.emit({ type: 'mirrorRotated', tile: tilePosition });
+    const end = this.beam.end;
+    if (this.isOnTarget && 'tile' in end && endKey(this.beam) !== wasOnTarget) {
+      this.emit({ type: 'beamConnected', tile: end.tile });
+    }
+  }
+
+  /** Starts the current level again from scratch, without costing a life. */
+  restartLevel(): void {
+    if (this.phase !== 'playing' && this.phase !== 'lifeLost') return;
+    this.score = this.scoreAtLevelStart;
+    this.loadLevel();
   }
 
   /** Advances past a paused result screen: next level, retry after a lost life. */
@@ -127,6 +167,8 @@ export class Game {
     this.energy = 1;
     this.overload = 0;
     this.chargeRemaining = this.chargeSeconds;
+    this.stats = { rotations: 0, seconds: 0, podsDestroyed: 0 };
+    this.scoreAtLevelStart = this.score;
     this.machinery = new Machinery(this.board, this.random);
     this.phase = 'playing';
     this.beam = traceBeam(this.board);
@@ -146,6 +188,7 @@ export class Game {
   private destroyPod(tile: Point): void {
     this.board.tiles[tile.y][tile.x] = { kind: 'empty' };
     this.podsRemaining--;
+    this.stats.podsDestroyed++;
     this.score += RULES.podScore;
     this.emit({ type: 'podDestroyed', tile });
     if (this.receiverOpen) this.openReceiver();
@@ -166,10 +209,11 @@ export class Game {
     const bonus = Math.round(this.energy * RULES.energyBonus);
     this.score += bonus;
     this.phase = 'levelComplete';
-    this.emit({ type: 'levelComplete', bonus });
+    this.emit({ type: 'levelComplete', bonus, stats: { ...this.stats } });
   }
 
   private updateOverload(seconds: number): void {
+    if (this.isBeamOverheating) this.overheatCause = this.beam.end.kind === 'mine' ? 'mine' : 'feedback';
     const change = this.isBeamOverheating
       ? RULES.overloadRisePerSecond * seconds
       : -RULES.overloadDecayPerSecond * seconds;
@@ -177,12 +221,12 @@ export class Game {
   }
 
   private checkForLostLife(): void {
-    if (this.overload >= 1) this.loseLife('overload');
+    if (this.overload >= 1) this.loseLife(this.overheatCause);
     else if (this.energy <= 0) this.loseLife('energy');
   }
 
-  private loseLife(reason: 'energy' | 'overload'): void {
-    this.lives--;
+  private loseLife(reason: LifeLostReason): void {
+    if (!this.unlimitedLives) this.lives--;
     this.phase = this.lives > 0 ? 'lifeLost' : 'gameOver';
     this.emit({ type: 'lifeLost', reason });
     if (this.phase === 'gameOver') this.emit({ type: 'gameOver' });
@@ -191,4 +235,9 @@ export class Game {
   private emit(event: GameEvent): void {
     for (const listener of this.listeners) listener(event);
   }
+}
+
+function endKey(beam: BeamTrace): string {
+  const end = beam.end;
+  return 'tile' in end ? `${end.kind}:${end.tile.x},${end.tile.y}` : end.kind;
 }

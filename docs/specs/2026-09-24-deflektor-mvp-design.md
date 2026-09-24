@@ -42,7 +42,7 @@ Tile map (15 × 9):
 | `*` | refractor (prism) | sends the beam on in a random direction that changes every 0.6 s |
 | `p` / `q` | polariser, absorbing / reflecting | rotates through 8 axes (0.5 s per step); passes beams along its axis, otherwise absorbs (`p`) or reflects like a mirror on its axis (`q`) |
 | `T` `U` | fibre-optic pair | beam enters one and leaves the other with the same direction |
-| `#` `=` | shorthand for a whole tile of purple or light-blue bricks | see walls |
+| `#` `=` `+` | shorthand for a whole tile of purple bricks, light-blue bricks or gate | see walls |
 
 Wall map (30 × 18, optional): `#` purple brick (reflects), `=` light-blue brick (absorbs), `+` gate (reflects until the last cell is destroyed, then vanishes).
 

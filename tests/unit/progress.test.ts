@@ -11,7 +11,13 @@ function memoryStorage(initial: Record<string, string> = {}) {
 
 describe('ProgressStore', () => {
   it('starts with only the first level unlocked', () => {
-    expect(new ProgressStore(memoryStorage(), 12).current).toEqual({ unlockedLevels: 1, highScore: 0, muted: false });
+    expect(new ProgressStore(memoryStorage(), 12).current).toEqual({
+      unlockedLevels: 1,
+      highScore: 0,
+      muted: false,
+      trainingDone: false,
+      bestLevelScores: {},
+    });
   });
 
   it('unlocks the level after a completed one and remembers it across sessions', () => {
@@ -57,5 +63,25 @@ describe('ProgressStore', () => {
     );
     store.recordScore(900);
     expect(store.current.highScore).toBe(900);
+  });
+
+  it('remembers that training was completed', () => {
+    const storage = memoryStorage();
+    new ProgressStore(storage, 12).completeTraining();
+    expect(new ProgressStore(storage, 12).current.trainingDone).toBe(true);
+  });
+
+  it('reports a new record only when a level score beats the previous best', () => {
+    const storage = memoryStorage();
+    const store = new ProgressStore(storage, 12);
+    expect(store.recordLevelScore(1, 1500)).toBe(true);
+    expect(store.recordLevelScore(1, 1200)).toBe(false);
+    expect(store.recordLevelScore(1, 1800)).toBe(true);
+    expect(new ProgressStore(storage, 12).current.bestLevelScores).toEqual({ 1: 1800 });
+  });
+
+  it('keeps older saves working when new fields are added', () => {
+    const old = memoryStorage({ 'deflektor.progress.v1': JSON.stringify({ unlockedLevels: 3, highScore: 10, muted: true }) });
+    expect(new ProgressStore(old, 12).current).toMatchObject({ unlockedLevels: 3, trainingDone: false, bestLevelScores: {} });
   });
 });

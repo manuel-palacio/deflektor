@@ -1,5 +1,6 @@
 import type { Sound } from '../audio/Sound';
-import { Game, type GameEvent } from '../engine/game';
+import { FixedStepper } from '../engine/fixedStep';
+import { Game, type GameEvent, type LifeLostReason } from '../engine/game';
 import { LEVELS } from '../engine/levels';
 import type { Point } from '../engine/types';
 import { playerMirrors } from '../input/cursor';
@@ -20,6 +21,11 @@ const SCREEN_IDS: Partial<Record<Screen, string>> = {
 const MAX_FRAME_SECONDS = 0.05;
 const ATTRACT_MOVE_SECONDS = 0.8;
 const RESULT_DELAY_MS = { levelComplete: 1300, lifeLost: 1200, gameOver: 1400 };
+const LIFE_LOST_TEXT: Record<LifeLostReason, { title: string; detail: string }> = {
+  mine: { title: 'Mine overload', detail: 'The beam rested on a mine until the laser overloaded.' },
+  feedback: { title: 'Feedback overload', detail: 'The beam was reflected back into the laser until it overloaded.' },
+  energy: { title: 'Out of energy', detail: 'The laser ran dry before the level was cleared.' },
+};
 
 interface MessageOptions {
   title: string;
@@ -37,6 +43,7 @@ export class App {
   private resultTimer?: number;
   private messageActions: { primary?: () => void; secondary?: () => void } = {};
   private readonly hud = new Hud();
+  private readonly stepper = new FixedStepper();
   private readonly controls: Controls;
 
   constructor(
@@ -69,8 +76,8 @@ export class App {
   /** Advances one animation frame. */
   frame(seconds: number): void {
     const step = Math.min(seconds, MAX_FRAME_SECONDS);
-    if (this.screen === 'playing') this.game.tick(step);
-    else if (this.attractMode) this.runAttractMode(step);
+    if (this.screen === 'playing') this.stepper.advance(step, (fixed) => this.game.tick(fixed));
+    else if (this.attractMode) this.stepper.advance(step, (fixed) => this.runAttractMode(fixed));
     const cursor = this.screen === 'playing' ? this.controls.cursor : undefined;
     this.renderer.render(this.game, step, cursor);
     const firing = this.screen === 'playing' && this.game.phase === 'playing' && !this.game.isCharging;
@@ -205,11 +212,11 @@ export class App {
     });
   }
 
-  private showLifeLost(reason: 'energy' | 'overload'): void {
+  private showLifeLost(reason: LifeLostReason): void {
     const lives = this.game.lives;
     this.showMessage({
-      title: reason === 'overload' ? 'Overload!' : 'Out of energy',
-      detail: `${lives} ${lives === 1 ? 'life' : 'lives'} left`,
+      title: LIFE_LOST_TEXT[reason].title,
+      detail: `${LIFE_LOST_TEXT[reason].detail}<br>${lives} ${lives === 1 ? 'life' : 'lives'} left`,
       primary: ['Try again', () => this.continueRun()],
       secondary: ['Menu', () => this.showTitle()],
     });
@@ -231,6 +238,14 @@ export class App {
       detail: `You bent every beam.<br>Final score <strong>${this.game.score.toLocaleString('en-US')}</strong>`,
       primary: ['Menu', () => this.showTitle()],
     });
+  }
+
+  private restartLevel(): void {
+    this.clearResultTimer();
+    this.game.restartLevel();
+    this.controls.resetCursor();
+    this.stepper.reset();
+    this.showScreen('playing');
   }
 
   private togglePause(): void {
@@ -300,7 +315,7 @@ export class App {
     });
     onClick('levels-back', () => this.showTitle());
     onClick('pause-resume', () => this.showScreen('playing'));
-    onClick('pause-restart', () => this.startRun(this.game.levelIndex));
+    onClick('pause-restart', () => this.restartLevel());
     onClick('pause-quit', () => this.showTitle());
     onClick('message-primary', () => this.messageActions.primary?.());
     onClick('message-secondary', () => this.messageActions.secondary?.());
