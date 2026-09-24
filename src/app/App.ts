@@ -1,12 +1,14 @@
 import type { Sound } from '../audio/Sound';
 import { traceBeam } from '../engine/beam';
 import { beamState } from '../engine/beamState';
+import { dailySeed, generateChallenge, MODIFIER_LABEL, type ChallengeLevel } from '../engine/challenge';
 import { FixedStepper } from '../engine/fixedStep';
 import { Game, RULES, type GameEvent, type LevelStats, type LifeLostReason } from '../engine/game';
 import { LEVELS } from '../engine/levels';
 import { clickDistance, computePar, rateStars, type Par } from '../engine/scoring';
 import { nextHint } from '../engine/solver';
 import { TRAINING_LEVELS } from '../engine/training';
+import { validateLevel } from '../engine/validation';
 import type { BeamTrace, LevelDefinition, Point } from '../engine/types';
 import { playerMirrors } from '../input/cursor';
 import { Controls } from '../input/Controls';
@@ -14,12 +16,13 @@ import type { Renderer } from '../render/Renderer';
 import { Coach } from './coach';
 import { byId, onClick } from './dom';
 import { Hud } from './Hud';
-import { explainFailure, format, starText, summarizeLevel, type LineItem } from './outcomes';
+import { explainFailure, format, formatSeconds, starText, summarizeLevel, type LineItem } from './outcomes';
 import type { ProgressStore, Settings } from './progress';
 import { SettingsPanel } from './SettingsPanel';
+import { decodeResult, shareText, type SharedResult } from './share';
 
 type Screen = 'title' | 'levels' | 'playing' | 'paused' | 'message' | 'settings';
-type Mode = 'campaign' | 'training';
+type Mode = 'campaign' | 'training' | 'challenge';
 
 const SCREEN_IDS: Partial<Record<Screen, string>> = {
   title: 'screen-title',
@@ -35,6 +38,7 @@ const TOAST_SECONDS = 5;
 
 interface ResultOptions {
   title: string;
+  share?: SharedResult;
   stars?: string;
   detail?: string;
   lines?: LineItem[];
@@ -53,7 +57,8 @@ export class App {
   private attractMode = true;
   private attractClock = 0;
   private resultTimer?: number;
-  private resultActions: { primary?: () => void; replay?: () => void; secondary?: () => void } = {};
+  private resultActions: { primary?: () => void; replay?: () => void; secondary?: () => void; share?: () => void } = {};
+  private challenge?: ChallengeLevel;
   private readonly hud = new Hud();
   private readonly stepper = new FixedStepper();
   private readonly coach = new Coach();
@@ -94,8 +99,31 @@ export class App {
     document.addEventListener('keydown', (event) => this.onMenuKey(event));
   }
 
+  /** Opens the title screen, or straight into a challenge when the link carries one. */
   start(): void {
     this.showTitle();
+    const params = new URLSearchParams(window.location.search);
+    const playtest = params.has('playtest') ? sessionStorage.getItem('deflektor.editor.playtest') : null;
+    if (playtest) {
+      const level = JSON.parse(playtest) as LevelDefinition;
+      if (validateLevel(level).length === 0) {
+        this.challenge = { ...level, seed: 'playtest', modifiers: [] };
+        this.startRun('challenge', 0);
+        return;
+      }
+      this.showToast('That level has problems: use Check in the editor.');
+    }
+    const seed = params.get('challenge');
+    if (seed) {
+      this.startChallenge(seed);
+      const rival = decodeResult(params.get('result') ?? '');
+      if (rival?.seed === seed) this.showToast(`Score to beat: ${starText(rival.stars)} ${format(rival.score)}. Good luck!`);
+    }
+  }
+
+  private startChallenge(seed: string): void {
+    this.challenge = generateChallenge(seed);
+    this.startRun('challenge', 0);
   }
 
   /** Advances one animation frame. */
@@ -170,10 +198,14 @@ export class App {
     button.disabled = locked;
     const stars = record?.bestStars ? starText(record.bestStars as 1 | 2 | 3) : '';
     button.innerHTML = `<span class="level-number">${String(index + 1).padStart(2, '0')}</span><span class="level-stars">${stars}</span>`;
-    button.setAttribute(
-      'aria-label',
-      `Level ${index + 1}${locked ? ', locked' : ''}${record?.bestStars ? `, best ${record.bestStars} stars` : ''}`,
-    );
+    const stats = record
+      ? `, played ${record.plays} ${record.plays === 1 ? 'time' : 'times'}, completed ${record.completions}` +
+        (record.bestScore !== undefined ? `, best score ${format(record.bestScore)}` : '') +
+        (record.bestSeconds !== undefined ? `, best time ${formatSeconds(record.bestSeconds)}` : '')
+      : '';
+    const label = `Level ${index + 1}${locked ? ', locked' : ''}${record?.bestStars ? `, best ${record.bestStars} stars` : ''}${stats}`;
+    button.setAttribute('aria-label', label);
+    button.title = label;
     button.addEventListener('click', () => this.startRun('campaign', index));
     return button;
   }
@@ -224,7 +256,14 @@ export class App {
     const secondary = byId('message-secondary');
     secondary.hidden = !options.secondary;
     secondary.textContent = options.secondary?.[0] ?? '';
-    this.resultActions = { primary: options.primary[1], replay: options.replay, secondary: options.secondary?.[1] };
+    const share = options.share;
+    byId('message-share').hidden = !share;
+    this.resultActions = {
+      primary: options.primary[1],
+      replay: options.replay,
+      secondary: options.secondary?.[1],
+      share: share && (() => this.share(share)),
+    };
     this.showScreen('message');
     byId('message-primary').focus();
   }
@@ -246,15 +285,14 @@ export class App {
   }
 
   private get levels(): LevelDefinition[] {
+    if (this.mode === 'challenge' && this.challenge) return [this.challenge];
     return this.mode === 'training' ? TRAINING_LEVELS : LEVELS;
   }
 
   private runLabels() {
     const number = this.game.levelIndex + 1;
-    return {
-      level: this.mode === 'training' ? `T${number}` : String(number).padStart(2, '0'),
-      unlimitedLives: this.mode === 'training',
-    };
+    const level = { training: `T${number}`, challenge: 'DAILY', campaign: String(number).padStart(2, '0') }[this.mode];
+    return { level, unlimitedLives: this.mode === 'training' };
   }
 
   private continueRun(): void {
@@ -284,6 +322,14 @@ export class App {
         break;
       case 'beamConnected':
         this.sound.connect();
+        break;
+      case 'mirrorLocked':
+        this.sound.locked();
+        this.showToast('That mirror has no turns left. Undo a turn to get one back.');
+        break;
+      case 'mirrorShattered':
+        this.sound.shatter();
+        this.announce('A fragile mirror shattered.');
         break;
       case 'receiverOpened':
         this.sound.gateOpen();
@@ -317,10 +363,31 @@ export class App {
       this.attempt = { levelIndex: index, restarts: 0, hintsUsed: 0 };
       if (this.mode === 'campaign') this.progress.recordPlay(index + 1);
     }
-    const lesson = this.mode === 'training' ? TRAINING_LEVELS[index].lesson : undefined;
-    this.coach.startLevel(lesson);
-    const label = this.mode === 'training' ? `Training ${index + 1}: ${TRAINING_LEVELS[index].name}` : `Level ${index + 1}`;
+    this.coach.startLevel(this.levelIntro(index));
+    const label = {
+      training: `Training ${index + 1}: ${TRAINING_LEVELS[index]?.name}`,
+      challenge: 'Daily challenge',
+      campaign: `Level ${index + 1}`,
+    }[this.mode];
     this.announce(`${label}. ${this.game.podsRemaining} cells. The laser is charging.`);
+  }
+
+  /** The line the coach opens a level with: a training lesson or the challenge's modifiers. */
+  private levelIntro(index: number): string | undefined {
+    if (this.mode === 'training') return TRAINING_LEVELS[index].lesson;
+    if (this.mode === 'challenge' && this.challenge) {
+      return `Challenge: ${this.challenge.modifiers.map((modifier) => MODIFIER_LABEL[modifier]).join(' + ')}.`;
+    }
+    return undefined;
+  }
+
+  private share(result: SharedResult): void {
+    const text = shareText(result, window.location.origin);
+    void navigator.clipboard?.writeText(text).then(
+      () => this.showToast('Result copied: paste it anywhere to challenge a friend.'),
+      () => this.showToast(text),
+    );
+    if (!navigator.clipboard) this.showToast(text);
   }
 
   private showLevelComplete(bonus: number, stats: LevelStats): void {
@@ -332,7 +399,7 @@ export class App {
     const records =
       this.mode === 'campaign'
         ? this.progress.recordCompletion(this.game.levelIndex + 1, { score: levelScore, seconds: stats.seconds, stars })
-        : { score: false, time: false, stars: false };
+        : { score: this.mode === 'challenge' && this.progress.recordChallenge(this.challenge!.seed, levelScore), time: false, stars: false };
     if (this.mode === 'campaign') {
       this.progress.unlockLevelAfter(this.game.levelIndex);
       this.progress.recordScore(this.game.score);
@@ -341,6 +408,19 @@ export class App {
     }
     const summary = summarizeLevel(stats, bonus, par, stars, records);
     const replayIndex = this.game.levelIndex;
+    if (this.mode === 'challenge') {
+      const seed = this.challenge!.seed;
+      this.showResult({
+        title: 'Challenge complete',
+        stars: starText(stars),
+        lines: summary.lines,
+        record: summary.recordNote,
+        share: { seed, score: levelScore, seconds: stats.seconds, stars },
+        primary: ['Menu', () => this.showTitle()],
+        replay: () => this.startChallenge(seed),
+      });
+      return;
+    }
     this.showResult({
       title: this.mode === 'training' && isLast ? 'Training complete' : summary.title,
       stars: starText(stars),
@@ -368,10 +448,11 @@ export class App {
 
   private showGameOver(): void {
     const levelIndex = this.game.levelIndex;
+    const retry = this.mode === 'challenge' ? () => this.startChallenge(this.challenge!.seed) : () => this.startRun('campaign', levelIndex);
     this.showResult({
       title: 'Game over',
       detail: `Final score ${format(this.game.score)}. High score ${format(this.progress.current.highScore)}.`,
-      primary: ['Retry level', () => this.startRun('campaign', levelIndex)],
+      primary: ['Retry level', retry],
       secondary: ['Menu', () => this.showTitle()],
     });
   }
@@ -408,7 +489,7 @@ export class App {
   /** Where the beam would go if the hovered mirror were turned one step clockwise. */
   private previewTurn(tile: Point): BeamTrace | undefined {
     const mirror = this.game.board.tiles[tile.y][tile.x];
-    if (mirror.kind !== 'mirror' || this.game.phase !== 'playing') return undefined;
+    if ((mirror.kind !== 'mirror' && mirror.kind !== 'oneWay') || this.game.phase !== 'playing') return undefined;
     mirror.rotation = (mirror.rotation + 1) % 16;
     const preview = traceBeam(this.game.board);
     mirror.rotation = (mirror.rotation + 15) % 16;
@@ -424,7 +505,7 @@ export class App {
       return;
     }
     const mirror = this.game.board.tiles[move.tile.y][move.tile.x];
-    const current = mirror.kind === 'mirror' ? mirror.rotation : 0;
+    const current = mirror.kind === 'mirror' || mirror.kind === 'oneWay' ? mirror.rotation : 0;
     const clicks = clickDistance(current, move.rotation);
     const clockwise = (move.rotation - current + 16) % 16 <= 8;
     this.renderer.setHint(move.tile);
@@ -549,6 +630,8 @@ export class App {
       this.showLevels();
     });
     onClick('title-training', () => this.startRun('training', 0));
+    onClick('title-daily', () => this.startChallenge(dailySeed(new Date())));
+    onClick('message-share', () => this.resultActions.share?.());
     onClick('title-settings', () => this.showSettings());
     onClick('title-help-toggle', () => {
       const help = byId('title-help');

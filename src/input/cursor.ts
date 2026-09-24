@@ -1,11 +1,16 @@
 import { findTiles } from '../engine/level';
-import type { Board, Point } from '../engine/types';
+import type { Board, Point, Tile } from '../engine/types';
+
+/** Mirrors the player turns (not self-rotating ones), including one-way mirrors. */
+export function isPlayerTurnable(tile: Tile): boolean {
+  return tile.kind === 'oneWay' || (tile.kind === 'mirror' && !tile.auto);
+}
 
 export function playerMirrors(board: Board): Point[] {
   const mirrors: Point[] = [];
   board.tiles.forEach((row, y) =>
     row.forEach((tile, x) => {
-      if (tile.kind === 'mirror' && !tile.auto) mirrors.push({ x, y });
+      if (isPlayerTurnable(tile)) mirrors.push({ x, y });
     }),
   );
   return mirrors;

@@ -29,6 +29,8 @@ export interface Progress {
   trainingDone: boolean;
   /** Keyed by level number (1-based). */
   records: Record<number, LevelRecord>;
+  /** Best score per challenge seed. */
+  challengeBests: Record<string, number>;
   settings: Settings;
 }
 
@@ -66,6 +68,7 @@ const DEFAULT_PROGRESS: Progress = {
   highScore: 0,
   trainingDone: false,
   records: {},
+  challengeBests: {},
   settings: DEFAULT_SETTINGS,
 };
 
@@ -131,6 +134,14 @@ export class ProgressStore {
     return newRecords;
   }
 
+  /** Stores a challenge score; returns true when it is a new best for that seed. */
+  recordChallenge(seed: string, score: number): boolean {
+    const previous = this.progress.challengeBests[seed];
+    if (previous !== undefined && score <= previous) return false;
+    this.save({ challengeBests: { ...this.progress.challengeBests, [seed]: score } });
+    return true;
+  }
+
   private record(levelNumber: number): LevelRecord {
     return this.progress.records[levelNumber] ?? { plays: 0, completions: 0 };
   }
@@ -187,6 +198,7 @@ export function migrate(saved: Record<string, unknown>): Progress {
     highScore: Number(base.highScore) || 0,
     trainingDone: Boolean(base.trainingDone),
     records,
+    challengeBests: (saved.challengeBests as Record<string, number>) ?? {},
     settings,
   };
 }

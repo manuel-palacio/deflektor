@@ -11,6 +11,7 @@ New players start with **Training**: five short lessons with contextual tips.
 - **Mouse / touch:** click or tap a mirror to rotate it clockwise. Right-click rotates it counter-clockwise, holding spins it, and the wheel also works. Hovering previews where the next turn sends the beam.
 - **Keyboard:** arrows / WASD jump between mirrors, Space / X rotate, Z rotates back. Ctrl+Z / Ctrl+Shift+Z undo and redo, H shows a hint, R restarts, P / Esc pause, M mutes.
 - **Stars:** ★ solve it, ★★ within the turn limit, ★★★ within the turn and time limits with no restarts or hints. Best score, time and stars are saved per level.
+- **Daily challenge:** a new generated level every day (the same for everyone), with modifiers such as beam splitters, one-way mirrors, limited-turn or fragile mirrors, moving targets and a clock. Share your result as a link; `?challenge=<seed>` opens any seed.
 - **Settings:** separate music and effects volume, tips, reduced motion, high contrast, and effects quality (automatically lighter on slow devices).
 
 ## Develop
@@ -19,7 +20,8 @@ New players start with **Training**: five short lessons with contextual tips.
 npm install
 npm run dev        # http://localhost:5190
 npm test           # Vitest: engine, levels (solver-verified), progress, layout
-python3 scripts/extract_levels.py 15   # regenerate src/engine/levels.ts from levels.png (needs Pillow)
+npm run check-levels   # validate every level file and prove it solvable
+python3 scripts/extract_levels.py 15   # regenerate levels/original/*.json from levels.png (needs Pillow)
 npm run test:e2e   # Playwright: menus, controls, pause, clearing a sector, losing a life
 npm run build
 ```
@@ -31,7 +33,8 @@ npm run build
 - `src/input/`: pointer and keyboard controls.
 - `src/audio/`: Web Audio synth.
 - `src/app/`: screen flow, HUD, hint coach, outcomes, settings, versioned save.
-- `scripts/extract_levels.py`: turns the C64 screenshots into level maps.
+- `levels/`: level files (JSON), picked up automatically; see `levels/README.md` for the format and the editor (`/?editor` in dev).
+- `scripts/extract_levels.py`: turns the C64 screenshots into level files.
 - `tests/support/solver.ts`: proves every level is solvable. Unit tests fail if a level edit breaks that.
 - `docs/specs/`: design notes and the map legend for writing levels.
 

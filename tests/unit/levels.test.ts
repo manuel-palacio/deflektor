@@ -4,7 +4,7 @@ import { LEVELS } from '../../src/engine/levels';
 import { solveLevel } from '../../src/engine/solver';
 
 describe('campaign levels', () => {
-  it('ships the first fifteen original levels', () => {
+  it('loads the first fifteen original levels', () => {
     expect(LEVELS).toHaveLength(15);
   });
 

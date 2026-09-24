@@ -20,6 +20,8 @@ export const PALETTE = {
   beamLoop: 0xd46bff,
   beamLocked: 0xffc34d,
   hint: 0xffd23f,
+  splitter: 0x9ff4ff,
+  oneWay: 0xff9df0,
   pod: 0xff3fb4,
   mine: 0xff4d2e,
   mirrorBase: 0x1b1650,

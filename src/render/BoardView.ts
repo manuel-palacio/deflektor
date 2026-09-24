@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
 import { directionAngle } from '../engine/beam';
-import type { Game } from '../engine/game';
+import { RULES, type Game } from '../engine/game';
 import type { Board, Point, Tile } from '../engine/types';
 import type { BoardLayout } from './layout';
 import { mirrorPlateRotation, nearestPlateAngle } from './mirrorAngle';
@@ -31,6 +31,8 @@ export class BoardView {
   private readonly walls = new WallsView();
   private readonly pieces = new Container();
   private readonly turning = new Map<string, TurningPiece>();
+  /** Per-mirror overlays for limited turns (pips) and fragility (cracks), redrawn every frame. */
+  private readonly overlays = new Map<string, Graphics>();
   private readonly pods = new Map<string, PulsingPiece>();
   private readonly mines = new Map<string, PulsingPiece>();
   private receiver?: { ring: Graphics; glow: Sprite };
@@ -53,6 +55,7 @@ export class BoardView {
     }
     this.receiver = undefined;
     this.turning.clear();
+    this.overlays.clear();
     this.pods.clear();
     this.mines.clear();
     this.base.addChild(this.drawBoardBase());
@@ -64,7 +67,8 @@ export class BoardView {
     this.clock += seconds;
     this.walls.update(seconds);
     this.animateTurning(game.board, seconds);
-    this.animatePods();
+    this.drawOverlays(game.board);
+    this.animatePods(seconds);
     this.animateMines(game.beam.end.kind === 'mine' ? game.beam.end.tile : undefined);
     this.animateReceiver(game.receiverOpen);
     this.drawCursor(cursorTile);
@@ -78,6 +82,22 @@ export class BoardView {
   /** The mirror a hint points to pulses until it has been turned. */
   setHint(tile: Point | undefined): void {
     this.hintTile = tile;
+  }
+
+  /** A moving cell glides to its new tile. */
+  movePod(from: Point, to: Point): void {
+    const pod = this.pods.get(key(from));
+    if (!pod) return;
+    this.pods.delete(key(from));
+    this.pods.set(key(to), pod);
+  }
+
+  /** A fragile mirror has shattered: its sprite goes. */
+  removeMirror(tile: Point): void {
+    this.turning.get(key(tile))?.node.destroy({ children: true });
+    this.turning.delete(key(tile));
+    this.overlays.get(key(tile))?.destroy();
+    this.overlays.delete(key(tile));
   }
 
   removePod(tile: Point): void {
@@ -122,9 +142,15 @@ export class BoardView {
       case 'receiver':
         return this.addReceiver(center);
       case 'mirror':
-        return this.addTurning(position, center, drawMirror(size, tile.auto), mirrorTarget, true);
+        this.addTurning(position, center, drawMirror(size, tile.auto), mirrorTarget, true);
+        if (tile.turnsLeft !== undefined || tile.fragile) this.addOverlay(position, center);
+        return;
       case 'polarizer':
         return this.addTurning(position, center, drawPolarizer(size, tile.reflects), polarizerTarget, true);
+      case 'splitter':
+        return this.addTurning(position, center, drawSplitter(size), splitterTarget, true);
+      case 'oneWay':
+        return this.addTurning(position, center, drawOneWay(size), oneWayTarget, false);
       case 'refractor':
         return this.addTurning(position, center, drawRefractor(size), refractorTarget, false);
       case 'pod':
@@ -149,6 +175,13 @@ export class BoardView {
     node.position.set(center.x, center.y);
     this.pieces.addChild(node);
     this.turning.set(key(position), { node, displayed: Number.NaN, target, symmetric });
+  }
+
+  private addOverlay(position: Point, center: Point): void {
+    const overlay = new Graphics();
+    overlay.position.set(center.x, center.y);
+    this.pieces.addChild(overlay);
+    this.overlays.set(key(position), overlay);
   }
 
   private addPulsing(group: Map<string, PulsingPiece>, position: Point, center: Point, node: Container): void {
@@ -181,9 +214,43 @@ export class BoardView {
     }
   }
 
-  private animatePods(): void {
-    for (const pod of this.pods.values()) {
+  private animatePods(seconds: number): void {
+    const glide = 1 - Math.exp(-10 * seconds);
+    for (const [tileKey, pod] of this.pods) {
       pod.node.scale.set(1 + Math.sin(this.clock * 3 + pod.phase) * 0.08);
+      const [x, y] = tileKey.split(',').map(Number);
+      const target = this.layout.tileCenter({ x, y });
+      pod.node.x += (target.x - pod.node.x) * glide;
+      pod.node.y += (target.y - pod.node.y) * glide;
+    }
+  }
+
+  /** Limited mirrors show their remaining turns as pips; fragile ones crack as they wear. */
+  private drawOverlays(board: Board): void {
+    const size = this.layout.tileSize;
+    for (const [tileKey, overlay] of this.overlays) {
+      const [x, y] = tileKey.split(',').map(Number);
+      const tile = board.tiles[y][x];
+      overlay.clear();
+      if (tile.kind !== 'mirror') continue;
+      if (tile.turnsLeft !== undefined) {
+        const pips = Math.min(tile.turnsLeft, 8);
+        for (let pip = 0; pip < pips; pip++) {
+          const angle = Math.PI * 0.75 + (pip / 8) * Math.PI * 1.5;
+          overlay.circle(Math.cos(angle) * size * 0.44, Math.sin(angle) * size * 0.44, size * 0.045);
+        }
+        overlay.fill(tile.turnsLeft === 0 ? PALETTE.beamHot : PALETTE.hint);
+        if (tile.turnsLeft === 0) overlay.circle(0, 0, size * 0.4).stroke({ width: 2, color: PALETTE.beamHot, alpha: 0.7 });
+      }
+      if (tile.fragile) {
+        const wear = Math.min(1, (tile.stress ?? 0) / RULES.fragileSeconds);
+        overlay.circle(0, 0, size * 0.38).stroke({ width: 1.5, color: 0xffffff, alpha: 0.35 + wear * 0.4 });
+        for (let crack = 0; crack < Math.ceil(wear * 5); crack++) {
+          const angle = crack * 1.3 + 0.4;
+          overlay.moveTo(0, 0).lineTo(Math.cos(angle) * size * 0.34, Math.sin(angle) * size * 0.34);
+        }
+        overlay.stroke({ width: 1.5, color: 0xffffff, alpha: 0.8 });
+      }
     }
   }
 
@@ -251,6 +318,14 @@ function polarizerTarget(tile: Tile): number {
   return tile.kind === 'polarizer' ? directionAngle(tile.axis) : 0;
 }
 
+function splitterTarget(tile: Tile): number {
+  return tile.kind === 'splitter' ? mirrorPlateRotation(tile.rotation) : 0;
+}
+
+function oneWayTarget(tile: Tile): number {
+  return tile.kind === 'oneWay' ? mirrorPlateRotation(tile.rotation) : 0;
+}
+
 function refractorTarget(tile: Tile): number {
   return tile.kind === 'refractor' ? directionAngle(tile.direction) : 0;
 }
@@ -303,6 +378,41 @@ function drawPolarizer(size: number, reflects: boolean): Container {
   }
   graphics.stroke({ width: 2, color, cap: 'round' });
   return graphics;
+}
+
+/** A half-silvered plate: see-through fill with a doubled edge. */
+function drawSplitter(size: number): Container {
+  const node = new Container();
+  node.addChild(
+    new Graphics()
+      .rect(-size * 0.4, -size * 0.4, size * 0.8, size * 0.8)
+      .stroke({ width: 1, color: PALETTE.splitter, alpha: 0.35 })
+      .roundRect(-size * 0.42, -size * 0.07, size * 0.84, size * 0.14, size * 0.05)
+      .fill({ color: PALETTE.splitter, alpha: 0.35 })
+      .moveTo(-size * 0.42, -size * 0.07)
+      .lineTo(size * 0.42, -size * 0.07)
+      .moveTo(-size * 0.42, size * 0.07)
+      .lineTo(size * 0.42, size * 0.07)
+      .stroke({ width: 1.5, color: PALETTE.splitter }),
+  );
+  return node;
+}
+
+/** A plate with one bright, arrowed face (the side that reflects) and a dark back. */
+function drawOneWay(size: number): Container {
+  const node = new Container();
+  node.addChild(
+    new Graphics()
+      .circle(0, 0, size * 0.36)
+      .fill({ color: PALETTE.mirrorBase, alpha: 0.9 })
+      .roundRect(-size * 0.4, -size * 0.06, size * 0.8, size * 0.06, size * 0.03)
+      .fill(PALETTE.oneWay)
+      .roundRect(-size * 0.4, 0, size * 0.8, size * 0.06, size * 0.03)
+      .fill({ color: 0x333355 })
+      .poly([0, -size * 0.3, -size * 0.1, -size * 0.14, size * 0.1, -size * 0.14])
+      .fill(PALETTE.oneWay),
+  );
+  return node;
 }
 
 /** A prism (bow-tie) with a glint pointing where it currently sends the beam. */

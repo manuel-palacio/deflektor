@@ -4,6 +4,7 @@ import {
   WALL_ROWS,
   type Board,
   type LevelDefinition,
+  type PieceSpec,
   type Point,
   type Tile,
   type WallKind,
@@ -31,7 +32,28 @@ export function parseLevel(level: LevelDefinition): Board {
       return parseTile(char, level);
     }),
   );
+  for (const piece of level.pieces ?? []) tiles[piece.y][piece.x] = pieceTile(piece);
   return { tiles, walls };
+}
+
+/** Builds the tile for a parameterised piece from a level file. */
+export function pieceTile(piece: PieceSpec): Tile {
+  switch (piece.type) {
+    case 'mirror':
+      return {
+        kind: 'mirror',
+        rotation: piece.rotation ?? 0,
+        auto: false,
+        ...(piece.turns !== undefined ? { turnsLeft: piece.turns } : {}),
+        ...(piece.fragile ? { fragile: true, stress: 0 } : {}),
+      };
+    case 'pod':
+      return piece.moves ? { kind: 'pod', moves: piece.moves, heading: 1 } : { kind: 'pod' };
+    case 'splitter':
+      return { kind: 'splitter', rotation: piece.rotation ?? 0 };
+    case 'oneWay':
+      return { kind: 'oneWay', rotation: piece.rotation ?? 0 };
+  }
 }
 
 export function findTiles(board: Board, kind: Tile['kind']): Point[] {

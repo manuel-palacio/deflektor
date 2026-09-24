@@ -1,0 +1,18 @@
+{
+  "id": "training-3",
+  "name": "Walls",
+  "lesson": "Purple bricks bounce the beam. Blue bricks swallow it.",
+  "emitter": "right",
+  "energySeconds": 240,
+  "tiles": [
+    "###############",
+    "...............",
+    "..........o....",
+    "...............",
+    "E....8.=....+++",
+    ".......=....+R+",
+    "............+++",
+    "...............",
+    "..............."
+  ]
+}

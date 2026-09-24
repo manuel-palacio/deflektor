@@ -44,7 +44,8 @@ export class Hud {
     const energy = game.energy * charge;
     this.energy.style.transform = `scaleX(${energy})`;
     this.energyBar.setAttribute('aria-valuenow', String(Math.round(energy * 100)));
-    this.energyLabel.textContent = game.isCharging ? 'Charging laser' : 'Energy';
+    const clock = Number.isFinite(game.timeRemaining) ? ` · ${Math.ceil(game.timeRemaining)}s left` : '';
+    this.energyLabel.textContent = game.isCharging ? 'Charging laser' : `Energy${clock}`;
     this.overload.style.transform = `scaleX(${game.overload})`;
     this.overloadBar.setAttribute('aria-valuenow', String(Math.round(game.overload * 100)));
     this.overloadMeter.classList.toggle('danger', game.overload > DANGER_OVERLOAD);

@@ -28,7 +28,21 @@ function showLevelErrors(): boolean {
   return true;
 }
 
+/** Development only: /?editor opens the level editor instead of the game. */
+async function bootEditor(): Promise<void> {
+  const { Editor, PLAYTEST_KEY } = await import('./editor/Editor');
+  document.body.classList.add('editing');
+  new Editor(document.body, browserStorage(), (level) => {
+    sessionStorage.setItem(PLAYTEST_KEY, JSON.stringify(level));
+    window.location.href = '/?playtest';
+  });
+}
+
 async function boot(): Promise<void> {
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('editor')) {
+    await bootEditor();
+    return;
+  }
   if (showLevelErrors()) return;
   const storage = browserStorage();
   const firstVisit = storage.getItem(SAVE_KEY) === null;

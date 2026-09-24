@@ -1,9 +1,9 @@
-import { BOARD_COLS, BOARD_ROWS, WALL_COLS, WALL_ROWS, type LevelDefinition } from './types';
+import { BOARD_COLS, BOARD_ROWS, WALL_COLS, WALL_ROWS, type LevelDefinition, type PieceSpec } from './types';
 
 export interface LevelDiagnostic {
   level: string;
   message: string;
-  layer?: 'tiles' | 'walls';
+  layer?: 'tiles' | 'walls' | 'pieces';
   /** 1-based row and column in the layer, when the problem has a position. */
   row?: number;
   column?: number;
@@ -12,6 +12,7 @@ export interface LevelDiagnostic {
 export const TILE_CHARS = new Set([...'.ERo@x*pqTU#=+0123456789abcdef']);
 export const WALL_CHARS = new Set([...'.#=+']);
 const CARDINALS = new Set(['up', 'right', 'down', 'left']);
+const PIECE_TYPES = new Set(['mirror', 'pod', 'splitter', 'oneWay']);
 
 /** Every structural problem in a level, with where it is, so a broken level can be fixed without guessing. */
 export function validateLevel(level: LevelDefinition): LevelDiagnostic[] {
@@ -24,7 +25,38 @@ export function validateLevel(level: LevelDefinition): LevelDiagnostic[] {
   checkGrid(level.tiles, 'tiles', BOARD_COLS, BOARD_ROWS, TILE_CHARS, report);
   if (level.walls) checkGrid(level.walls, 'walls', WALL_COLS, WALL_ROWS, WALL_CHARS, report);
   checkCounts(level.tiles, report);
+  (level.pieces ?? []).forEach((piece, index) => {
+    checkPiece(piece, index, report);
+    const under = level.tiles[piece.y]?.[piece.x];
+    if (under === 'E' || under === 'R') {
+      report(`piece ${index + 1}: cannot replace the ${under === 'E' ? 'laser' : 'receiver'}`, { layer: 'pieces', row: piece.y + 1, column: piece.x + 1 });
+    }
+  });
+  if (level.timeLimitSeconds !== undefined && !(level.timeLimitSeconds > 0)) {
+    report(`timeLimitSeconds must be a positive number (got ${level.timeLimitSeconds})`);
+  }
   return problems;
+}
+
+function checkPiece(piece: PieceSpec, index: number, report: Report): void {
+  const where = { layer: 'pieces' as const, row: piece.y + 1, column: piece.x + 1 };
+  const label = `piece ${index + 1}`;
+  if (!PIECE_TYPES.has(piece.type)) report(`${label}: unknown type "${piece.type}"`, where);
+  const inside = Number.isInteger(piece.x) && Number.isInteger(piece.y) && piece.x >= 0 && piece.y >= 0 && piece.x < BOARD_COLS && piece.y < BOARD_ROWS;
+  if (!inside) report(`${label}: position (${piece.x}, ${piece.y}) is off the 15 x 9 board`, { layer: 'pieces' });
+  if (piece.rotation !== undefined && !(Number.isInteger(piece.rotation) && piece.rotation >= 0 && piece.rotation < 16)) {
+    report(`${label}: rotation must be a whole number from 0 to 15 (got ${piece.rotation})`, where);
+  }
+  if (piece.turns !== undefined && !(Number.isInteger(piece.turns) && piece.turns >= 0)) {
+    report(`${label}: turns must be a whole number of at least 0 (got ${piece.turns})`, where);
+  }
+  if (piece.moves !== undefined && piece.moves !== 'horizontal' && piece.moves !== 'vertical') {
+    report(`${label}: moves must be "horizontal" or "vertical" (got "${piece.moves}")`, where);
+  }
+  if ((piece.turns !== undefined || piece.fragile) && piece.type !== 'mirror') {
+    report(`${label}: only mirrors can have limited turns or be fragile`, where);
+  }
+  if (piece.moves !== undefined && piece.type !== 'pod') report(`${label}: only pods can move`, where);
 }
 
 type Report = (message: string, where?: Partial<LevelDiagnostic>) => void;

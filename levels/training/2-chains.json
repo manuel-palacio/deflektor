@@ -1,0 +1,18 @@
+{
+  "id": "training-2",
+  "name": "Chains",
+  "lesson": "Mirrors pass the beam along. Line them up one after another.",
+  "emitter": "right",
+  "energySeconds": 240,
+  "tiles": [
+    "...............",
+    "E...0.....o....",
+    "...............",
+    "...............",
+    "...............",
+    "...............",
+    ".o..4.....c...R",
+    "...............",
+    "..............."
+  ]
+}

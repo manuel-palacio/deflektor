@@ -1,5 +1,5 @@
 import type { Board, Point } from '../engine/types';
-import { mirrorInDirection, startingMirror } from './cursor';
+import { isPlayerTurnable, mirrorInDirection, startingMirror } from './cursor';
 
 const HOLD_DELAY_MS = 280;
 const HOLD_INTERVAL_MS = 70;
@@ -181,7 +181,6 @@ export class Controls {
     const bounds = this.canvas.getBoundingClientRect();
     const tile = this.target.tileAtScreen({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
     if (!tile) return undefined;
-    const piece = this.target.board().tiles[tile.y][tile.x];
-    return piece.kind === 'mirror' && !piece.auto ? tile : undefined;
+    return isPlayerTurnable(this.target.board().tiles[tile.y][tile.x]) ? tile : undefined;
   }
 }

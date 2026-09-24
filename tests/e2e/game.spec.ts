@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { LEVELS } from '../../src/engine/levels';
+import { LEVELS } from './levelData';
 import { solveReceiverWithMirrorsOnly } from '../../src/engine/solver';
 import { clickTile, gameState, mirrorRotation, startLevel, turnMirrorTo } from './helpers';
 

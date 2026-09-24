@@ -183,6 +183,18 @@ export class Renderer {
         this.beam.flash();
         break;
       }
+      case 'mirrorShattered': {
+        const at = this.tilePixel(event.tile);
+        this.board.removeMirror(event.tile);
+        this.effects.burst(at, PALETTE.mirrorPlate, 30, size * 6, size * 0.2);
+        break;
+      }
+      case 'mirrorLocked':
+        this.effects.shockwave(this.tilePixel(event.tile), PALETTE.beamHot, size * 0.6, 0.3);
+        break;
+      case 'podMoved':
+        this.board.movePod(event.from, event.to);
+        break;
       case 'receiverOpened':
         for (const at of this.board.openGates()) this.effects.burst(at, PALETTE.gateEdge, 6, size * 3, size * 0.25);
         this.effects.shockwave(this.tilePixel(findTiles(game.board, 'receiver')[0]), PALETTE.receiverOpen, size * 3);
@@ -195,8 +207,8 @@ export class Renderer {
         break;
       }
       case 'lifeLost': {
-        const beamEnd = game.beam.paths.at(-1)!.at(-1)!;
-        const at = this.layout.beamToPixels(beamEnd);
+        const culprit = game.beam.ends.findIndex((end) => end.kind === 'mine' || end.kind === 'emitter');
+        const at = this.layout.beamToPixels(game.beam.endPoints[Math.max(0, culprit)]);
         this.effects.burst(at, PALETTE.beamHot, 90, size * 10, size * 0.45);
         this.effects.shockwave(at, PALETTE.beamHot, size * 6, 0.8);
         if (!this.display.reducedMotion) {
@@ -217,7 +229,7 @@ export class Renderer {
     } else {
       this.pulseOnRouteChange(game.beam);
       const style = { light: this.effectsLevel === 'low', highContrast: this.display.highContrast };
-      const beamEnd = this.beam.draw(game.beam, this.layout, this.lastState, game.overload, seconds, style);
+      const beamEnd = this.beam.draw(game.beam, this.layout, this.lastState, game.overload, seconds, style, game.receiverOpen);
       if (game.phase === 'playing') this.effects.sparks(beamEnd, PALETTE.beamCore, this.layout.tileSize, seconds);
     }
     this.beam.drawPreview(this.preview, this.layout);

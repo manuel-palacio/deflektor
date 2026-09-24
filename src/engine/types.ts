@@ -26,8 +26,27 @@ export type Tile =
   | { kind: 'empty' }
   | { kind: 'emitter'; direction: Direction }
   | { kind: 'receiver' }
-  | { kind: 'mirror'; rotation: number; auto: boolean }
-  | { kind: 'pod' }
+  | {
+      kind: 'mirror';
+      rotation: number;
+      auto: boolean;
+      /** Challenge: how many more times the player may turn it (unlimited when absent). */
+      turnsLeft?: number;
+      /** Challenge: shatters once the beam has bounced off it for long enough. */
+      fragile?: boolean;
+      /** Seconds the beam has spent reflecting off a fragile mirror. */
+      stress?: number;
+    }
+  | {
+      kind: 'pod';
+      /** Challenge: a moving target that patrols along a row or column. */
+      moves?: 'horizontal' | 'vertical';
+      heading?: 1 | -1;
+    }
+  /** Half-silvered: the beam both passes straight through and reflects as off a mirror. */
+  | { kind: 'splitter'; rotation: number }
+  /** Reflects beams arriving on its bright face; beams from behind pass through. The player can turn it. */
+  | { kind: 'oneWay'; rotation: number }
   | { kind: 'mine' }
   | { kind: 'refractor'; direction: Direction }
   /** Rotates by itself; lets the beam through only along its axis (0..7), otherwise absorbs or reflects. */
@@ -45,13 +64,37 @@ export interface Board {
 }
 
 export interface LevelDefinition {
+  /** Stable identifier, e.g. "original-03"; optional for levels built in code. */
+  id?: string;
   name: string;
+  /** Where the layout comes from (credit); informational only. */
+  source?: string;
   /** 15 x 9 tile characters. */
   tiles: string[];
   /** 30 x 18 quarter-tile wall characters; optional when the level has no walls. */
   walls?: string[];
   emitter: Cardinal;
   energySeconds: number;
+  /** Pieces that need parameters (challenge entities); each replaces the tile at its position. */
+  pieces?: PieceSpec[];
+  /** Challenge: the level must be finished within this many seconds of firing. */
+  timeLimitSeconds?: number;
+}
+
+export type PieceType = 'mirror' | 'pod' | 'splitter' | 'oneWay';
+
+/** A parameterised piece in a level file, placed at tile (x, y), 0-based. */
+export interface PieceSpec {
+  x: number;
+  y: number;
+  type: PieceType;
+  rotation?: number;
+  /** Mirrors: limited number of turns. */
+  turns?: number;
+  /** Mirrors: shatter after sustained reflection. */
+  fragile?: boolean;
+  /** Pods: patrol along this axis. */
+  moves?: 'horizontal' | 'vertical';
 }
 
 export type BeamEnd =
@@ -65,7 +108,14 @@ export type BeamEnd =
   | { kind: 'edge' };
 
 export interface BeamTrace {
-  /** Lattice points (half-tile units) the beam passes through, in order. Breaks start a new path. */
+  /** Points the beam passes through (quarter-tile units); each branch or teleport starts a new path. */
   paths: Point[][];
+  /** Where the main beam ends (the first branch). */
   end: BeamEnd;
+  /** Where every branch ends; splitters create more than one. */
+  ends: BeamEnd[];
+  /** The point where each branch in `ends` stops, in beam coordinates. */
+  endPoints: Point[];
+  /** Tiles the beam was turned at (mirrors, refractors, splitters…), for fragile mirrors. */
+  turned: Point[];
 }

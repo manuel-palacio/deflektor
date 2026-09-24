@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
-import type { BeamState } from '../engine/beamState';
+import { endState, type BeamState } from '../engine/beamState';
 import type { BeamTrace, Point } from '../engine/types';
 import type { BoardLayout } from './layout';
 import { mixColor, PALETTE } from './palette';
@@ -58,7 +58,15 @@ export class BeamView {
   }
 
   /** Returns the pixel where the beam ends, for impact sparks. */
-  draw(beam: BeamTrace, layout: BoardLayout, state: BeamState, overload: number, seconds: number, style: BeamStyle): Point {
+  draw(
+    beam: BeamTrace,
+    layout: BoardLayout,
+    state: BeamState,
+    overload: number,
+    seconds: number,
+    style: BeamStyle,
+    receiverOpen: boolean,
+  ): Point {
     this.clock += seconds;
     this.boost = Math.max(0, this.boost - seconds);
     const base = STATE_COLOR[state];
@@ -79,8 +87,11 @@ export class BeamView {
       if (!style.light) this.drawPulses(path, size, color);
     }
     this.drawReflections(paths, size, color, seconds);
-    const end = paths.at(-1)!.at(-1)!;
-    this.drawEndMarker(end, state, size, color);
+    beam.ends.forEach((branchEnd, index) => {
+      const branchState = endState(branchEnd, receiverOpen);
+      if (branchState) this.drawEndMarker(layout.beamToPixels(beam.endPoints[index]), branchState, size, STATE_COLOR[branchState]);
+    });
+    const end = layout.beamToPixels(beam.endPoints[0]);
     this.impact.position.set(end.x, end.y);
     this.impact.tint = color;
     this.impact.width = this.impact.height = size * (0.8 + Math.sin(this.clock * 30) * 0.12) * (state === 'blocked' ? 0.5 : 1);
@@ -173,7 +184,11 @@ export class BeamView {
       const radius = size * 0.35;
       for (let dash = 0; dash < 6; dash++) {
         const start = this.clock * 3 + (dash * Math.PI) / 3;
-        this.marks.arc(end.x, end.y, radius, start, start + 0.6).stroke({ width: 2.5, color, alpha: 0.9 });
+        // arc() continues from the pen position, so move the pen to the dash's start first.
+        this.marks
+          .moveTo(end.x + Math.cos(start) * radius, end.y + Math.sin(start) * radius)
+          .arc(end.x, end.y, radius, start, start + 0.6)
+          .stroke({ width: 2.5, color, alpha: 0.9 });
       }
     } else if (state === 'mine' || state === 'feedback') {
       const radius = size * (0.3 + Math.abs(Math.sin(this.clock * 12)) * 0.2);

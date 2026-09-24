@@ -1,6 +1,7 @@
 import { oppositeDirection, reflectOffMirror, traceBeam } from './beam';
+import { interact } from './pieces';
 import { findTiles, parseLevel } from './level';
-import type { BeamEnd, Board, LevelDefinition, Point, Tile } from './types';
+import type { BeamEnd, BeamTrace, Board, LevelDefinition, Point, Tile } from './types';
 
 export interface MirrorSetting {
   tile: Point;
@@ -56,7 +57,7 @@ export function nextHint(board: Board): MirrorSetting | undefined {
   for (const stage of solveBoard(copy, 'hint')) {
     const move = stage.settings.find(({ tile, rotation }) => {
       const piece = board.tiles[tile.y][tile.x];
-      return piece.kind === 'mirror' && piece.rotation !== rotation;
+      return (piece.kind === 'mirror' || piece.kind === 'oneWay') && piece.rotation !== rotation;
     });
     if (move) return move;
   }
@@ -93,10 +94,12 @@ class BeamPathSearch {
 
   run(): SolutionStage | null {
     const first = traceBeam(this.board, { stopAt: (tile) => this.isAdjustable(tile) });
-    if (this.isGoal(first.end) && 'tile' in first.end) return { settings: [], target: first.end.tile };
-    if (first.end.kind !== 'stopped' || !this.isChoosable(first.end.tile)) return null;
-    const visited = new Set<string>([stateKey(first.end.tile, first.end.direction)]);
-    const queue: SearchNode[] = [{ tile: first.end.tile, incoming: first.end.direction, choices: [] }];
+    const reached = this.goalIn(first);
+    if (reached) return { settings: [], target: reached };
+    const stop = stoppedIn(first);
+    if (!stop || !this.isChoosable(stop.tile)) return null;
+    const visited = new Set<string>([stateKey(stop.tile, stop.direction)]);
+    const queue: SearchNode[] = [{ tile: stop.tile, incoming: stop.direction, choices: [] }];
     for (let index = 0; index < queue.length; index++) {
       const found = this.expand(queue[index], queue, visited);
       if (found) return found;
@@ -114,13 +117,15 @@ class BeamPathSearch {
         from: { tile: node.tile, direction },
         stopAt: (tile) => this.isAdjustable(tile),
       });
-      const end = trace.end;
-      if (this.isGoal(end) && 'tile' in end) {
-        const verified = this.verify(choices, end.tile);
+      const reached = this.goalIn(trace);
+      if (reached) {
+        const verified = this.verify(choices, reached);
         if (verified) return verified;
-      } else if (end.kind === 'stopped' && this.isChoosable(end.tile) && !visited.has(stateKey(end.tile, end.direction))) {
-        visited.add(stateKey(end.tile, end.direction));
-        queue.push({ tile: end.tile, incoming: end.direction, choices });
+      }
+      const stop = stoppedIn(trace);
+      if (stop && this.isChoosable(stop.tile) && !visited.has(stateKey(stop.tile, stop.direction))) {
+        visited.add(stateKey(stop.tile, stop.direction));
+        queue.push({ tile: stop.tile, incoming: stop.direction, choices });
       }
     }
     return null;
@@ -130,28 +135,36 @@ class BeamPathSearch {
   private verify(choices: Choice[], target: Point): SolutionStage | null {
     const saved = choices.map(({ tile }) => ({ tile, piece: { ...this.board.tiles[tile.y][tile.x] } }));
     for (const { tile, option } of choices) apply(this.board.tiles[tile.y][tile.x], option);
-    const end = traceBeam(this.board).end;
-    if (this.isGoal(end) && 'tile' in end && end.tile.x === target.x && end.tile.y === target.y) {
-      return { settings: playerMirrorSettings(this.board, choices), target };
-    }
+    const hit = traceBeam(this.board).ends.some(
+      (end) => this.isGoal(end) && 'tile' in end && end.tile.x === target.x && end.tile.y === target.y,
+    );
+    if (hit) return { settings: playerMirrorSettings(this.board, choices), target };
     for (const { tile, piece } of saved) this.board.tiles[tile.y][tile.x] = piece;
     return null;
   }
 
+  /** Any branch that ends on the goal (splitters can produce several ends). */
+  private goalIn(trace: BeamTrace): Point | undefined {
+    const end = trace.ends.find((candidate) => this.isGoal(candidate) && 'tile' in candidate);
+    return end && 'tile' in end ? end.tile : undefined;
+  }
+
   private isChoosable(tile: Point): boolean {
-    return !this.mirrorsOnly || this.board.tiles[tile.y][tile.x].kind === 'mirror';
+    const kind = this.board.tiles[tile.y][tile.x].kind;
+    return !this.mirrorsOnly || kind === 'mirror' || kind === 'oneWay';
   }
 
   private isAdjustable(tile: Point): boolean {
     const kind = this.board.tiles[tile.y][tile.x].kind;
-    return kind === 'mirror' || kind === 'refractor' || kind === 'polarizer';
+    return kind === 'mirror' || kind === 'oneWay' || kind === 'refractor' || kind === 'polarizer';
   }
 }
 
 function playerMirrorSettings(board: Board, choices: Choice[]): MirrorSetting[] {
   return choices.flatMap(({ tile }) => {
     const piece = board.tiles[tile.y][tile.x];
-    return piece.kind === 'mirror' && !piece.auto ? [{ tile, rotation: piece.rotation }] : [];
+    const playerTurns = piece.kind === 'oneWay' || (piece.kind === 'mirror' && !piece.auto);
+    return playerTurns ? [{ tile, rotation: piece.rotation }] : [];
   });
 }
 
@@ -161,7 +174,7 @@ function optionsFor(piece: Tile): number[] {
 }
 
 function apply(piece: Tile, option: number): void {
-  if (piece.kind === 'mirror') piece.rotation = option;
+  if (piece.kind === 'mirror' || piece.kind === 'oneWay') piece.rotation = option;
   if (piece.kind === 'refractor') piece.direction = option;
   if (piece.kind === 'polarizer') piece.axis = option;
 }
@@ -169,12 +182,20 @@ function apply(piece: Tile, option: number): void {
 /** Where the beam heads after the piece in the given state; undefined when the piece absorbs it. */
 function outgoing(piece: Tile, option: number, incoming: number): number | undefined {
   if (piece.kind === 'mirror') return reflectOffMirror(incoming, option);
+  if (piece.kind === 'oneWay') {
+    const result = interact({ ...piece, rotation: option }, incoming);
+    return result.type === 'turn' ? result.direction : incoming;
+  }
   if (piece.kind === 'refractor') return option;
   if (piece.kind === 'polarizer') {
     if (incoming % 8 === option) return incoming;
     return piece.reflects ? reflectOffMirror(incoming, option * 2) : undefined;
   }
   return undefined;
+}
+
+function stoppedIn(trace: BeamTrace): Extract<BeamEnd, { kind: 'stopped' }> | undefined {
+  return trace.ends.find((end): end is Extract<BeamEnd, { kind: 'stopped' }> => end.kind === 'stopped');
 }
 
 function openGates(board: Board): void {

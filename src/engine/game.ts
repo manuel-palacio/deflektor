@@ -1,7 +1,7 @@
 import { traceBeam, wrapDirection } from './beam';
 import { findTiles, parseLevel, tileAt } from './level';
 import { Machinery } from './machinery';
-import type { BeamTrace, Board, LevelDefinition, Point } from './types';
+import type { BeamEnd, BeamTrace, Board, LevelDefinition, Point } from './types';
 
 export const RULES = {
   startingLives: 3,
@@ -11,6 +11,8 @@ export const RULES = {
   overloadDecayPerSecond: 0.25,
   /** Like the original's "CHARGING LAZER": the beam only aims for a moment before it starts to burn. */
   chargeSeconds: 2,
+  /** A fragile mirror shatters after this much time reflecting the beam. */
+  fragileSeconds: 1.5,
 } as const;
 
 export interface GameOptions {
@@ -22,7 +24,7 @@ export interface GameOptions {
 }
 
 /** Why a life was lost: running dry, a mine overloading the laser, or the beam fed back into the laser. */
-export type LifeLostReason = 'energy' | 'mine' | 'feedback';
+export type LifeLostReason = 'energy' | 'mine' | 'feedback' | 'time';
 
 /** How the current level has been played so far. */
 export interface LevelStats {
@@ -41,6 +43,11 @@ export type GameEvent =
   /** A turn newly lined the beam up on a pod or the open receiver. */
   | { type: 'beamConnected'; tile: Point }
   | { type: 'receiverOpened' }
+  /** A fragile mirror took too much beam and broke. */
+  | { type: 'mirrorShattered'; tile: Point }
+  /** The player tried to turn a mirror that has no turns left. */
+  | { type: 'mirrorLocked'; tile: Point }
+  | { type: 'podMoved'; from: Point; to: Point }
   | { type: 'levelComplete'; bonus: number; stats: LevelStats }
   | { type: 'lifeLost'; reason: LifeLostReason }
   | { type: 'gameOver' };
@@ -103,13 +110,17 @@ export class Game {
 
   /** True when the beam currently ends on something the player wants: a pod, or the receiver once open. */
   get isOnTarget(): boolean {
-    const end = this.beam.end.kind;
-    return end === 'pod' || (end === 'receiver' && this.receiverOpen);
+    return this.beam.ends.some((end) => end.kind === 'pod' || (end.kind === 'receiver' && this.receiverOpen));
+  }
+
+  /** Seconds left on a timed level (Infinity when the level has no time limit). */
+  get timeRemaining(): number {
+    const limit = this.level.timeLimitSeconds;
+    return limit === undefined ? Infinity : Math.max(0, limit - this.stats.seconds);
   }
 
   get isBeamOverheating(): boolean {
-    const end = this.beam.end.kind;
-    return end === 'mine' || end === 'emitter';
+    return this.beam.ends.some((end) => end.kind === 'mine' || end.kind === 'emitter');
   }
 
   on(listener: Listener): void {
@@ -118,7 +129,7 @@ export class Game {
 
   tick(seconds: number): void {
     if (this.phase !== 'playing') return;
-    this.machinery.advance(seconds);
+    for (const move of this.machinery.advance(seconds)) this.emit({ type: 'podMoved', ...move });
     if (this.isCharging) {
       this.chargeRemaining = Math.max(0, this.chargeRemaining - seconds);
       this.beam = traceBeam(this.board);
@@ -127,13 +138,20 @@ export class Game {
     this.stats.seconds += seconds;
     this.resolveBeam();
     if (this.phase !== 'playing') return;
+    this.stressFragileMirrors(seconds);
     this.updateOverload(seconds);
     this.energy = Math.max(0, this.energy - seconds / this.level.energySeconds);
     this.checkForLostLife();
   }
 
   rotateMirror(tilePosition: Point, steps: number): void {
+    const tile = tileAt(this.board, tilePosition);
+    if (tile?.kind === 'mirror' && tile.turnsLeft === 0 && this.phase === 'playing') {
+      this.emit({ type: 'mirrorLocked', tile: tilePosition });
+      return;
+    }
     if (!this.turnMirror(tilePosition, steps)) return;
+    if (tile?.kind === 'mirror' && tile.turnsLeft !== undefined) tile.turnsLeft--;
     this.history.push({ tile: tilePosition, steps });
     this.undone.length = 0;
   }
@@ -151,6 +169,7 @@ export class Game {
     if (!this.canUndo) return;
     const turn = this.history.pop()!;
     this.turnMirror(turn.tile, -turn.steps);
+    this.refundTurn(turn.tile, 1);
     this.undone.push(turn);
   }
 
@@ -158,22 +177,36 @@ export class Game {
     if (!this.canRedo) return;
     const turn = this.undone.pop()!;
     this.turnMirror(turn.tile, turn.steps);
+    this.refundTurn(turn.tile, -1);
     this.history.push(turn);
+  }
+
+  /** Undo gives a limited mirror its turn back; redo takes it again. */
+  private refundTurn(tilePosition: Point, turns: number): void {
+    const tile = tileAt(this.board, tilePosition);
+    if (tile?.kind === 'mirror' && tile.turnsLeft !== undefined) tile.turnsLeft += turns;
   }
 
   private turnMirror(tilePosition: Point, steps: number): boolean {
     const tile = tileAt(this.board, tilePosition);
-    if (this.phase !== 'playing' || tile?.kind !== 'mirror' || tile.auto) return false;
-    const wasOnTarget = this.isOnTarget ? endKey(this.beam) : undefined;
+    const turnable = tile?.kind === 'oneWay' || (tile?.kind === 'mirror' && !tile.auto);
+    if (this.phase !== 'playing' || !turnable) return false;
+    const targetsBefore = this.targetKeys();
     tile.rotation = wrapDirection(tile.rotation + steps);
     this.stats.rotations++;
     this.beam = traceBeam(this.board);
     this.emit({ type: 'mirrorRotated', tile: tilePosition });
-    const end = this.beam.end;
-    if (this.isOnTarget && 'tile' in end && endKey(this.beam) !== wasOnTarget) {
-      this.emit({ type: 'beamConnected', tile: end.tile });
-    }
+    const connected = this.beam.ends.find((end) => 'tile' in end && this.isTarget(end) && !targetsBefore.has(endKey(end)));
+    if (connected && 'tile' in connected) this.emit({ type: 'beamConnected', tile: connected.tile });
     return true;
+  }
+
+  private isTarget(end: BeamEnd): boolean {
+    return end.kind === 'pod' || (end.kind === 'receiver' && this.receiverOpen);
+  }
+
+  private targetKeys(): Set<string> {
+    return new Set(this.beam.ends.filter((end) => this.isTarget(end)).map(endKey));
   }
 
   /** Starts the current level again from scratch, without costing a life. */
@@ -216,15 +249,32 @@ export class Game {
 
   private resolveBeam(): void {
     this.beam = traceBeam(this.board);
-    const end = this.beam.end;
-    if (end.kind === 'pod') {
-      this.destroyPod(end.tile);
-    } else if (end.kind === 'receiver' && this.receiverOpen) {
+    const pods = this.beam.ends.filter((end) => end.kind === 'pod');
+    for (const pod of pods) if ('tile' in pod) this.destroyPod(pod.tile);
+    if (pods.length === 0 && this.beam.ends.some((end) => end.kind === 'receiver') && this.receiverOpen) {
       this.completeLevel();
     }
   }
 
+  /** Fragile mirrors wear out while the beam bounces off them, and shatter. */
+  private stressFragileMirrors(seconds: number): void {
+    const worn = new Set<string>();
+    for (const point of this.beam.turned) {
+      const tile = tileAt(this.board, point);
+      const key = `${point.x},${point.y}`;
+      if (tile?.kind !== 'mirror' || !tile.fragile || worn.has(key)) continue;
+      worn.add(key);
+      tile.stress = (tile.stress ?? 0) + seconds;
+      if (tile.stress >= RULES.fragileSeconds) {
+        this.board.tiles[point.y][point.x] = { kind: 'empty' };
+        this.emit({ type: 'mirrorShattered', tile: point });
+        this.beam = traceBeam(this.board);
+      }
+    }
+  }
+
   private destroyPod(tile: Point): void {
+    if (this.board.tiles[tile.y][tile.x].kind !== 'pod') return;
     this.board.tiles[tile.y][tile.x] = { kind: 'empty' };
     this.podsRemaining--;
     this.stats.podsDestroyed++;
@@ -252,7 +302,9 @@ export class Game {
   }
 
   private updateOverload(seconds: number): void {
-    if (this.isBeamOverheating) this.overheatCause = this.beam.end.kind === 'mine' ? 'mine' : 'feedback';
+    if (this.isBeamOverheating) {
+      this.overheatCause = this.beam.ends.some((end) => end.kind === 'mine') ? 'mine' : 'feedback';
+    }
     const change = this.isBeamOverheating
       ? RULES.overloadRisePerSecond * seconds
       : -RULES.overloadDecayPerSecond * seconds;
@@ -262,6 +314,7 @@ export class Game {
   private checkForLostLife(): void {
     if (this.overload >= 1) this.loseLife(this.overheatCause);
     else if (this.energy <= 0) this.loseLife('energy');
+    else if (this.timeRemaining <= 0) this.loseLife('time');
   }
 
   private loseLife(reason: LifeLostReason): void {
@@ -276,7 +329,6 @@ export class Game {
   }
 }
 
-function endKey(beam: BeamTrace): string {
-  const end = beam.end;
+function endKey(end: BeamEnd): string {
   return 'tile' in end ? `${end.kind}:${end.tile.x},${end.tile.y}` : end.kind;
 }

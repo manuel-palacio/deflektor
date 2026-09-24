@@ -1,4 +1,5 @@
 import { findTiles, tileAt } from './level';
+import { interact } from './pieces';
 import {
   DIRECTION_COUNT,
   WALL_COLS,
@@ -8,7 +9,6 @@ import {
   type Board,
   type Direction,
   type Point,
-  type Tile,
   type WallKind,
 } from './types';
 
@@ -22,6 +22,8 @@ import {
 const MAX_CROSSINGS = 6000;
 /** A drawable beam never has more corners than this; anything longer is reported as a loop. */
 export const MAX_BEAM_POINTS = 400;
+/** Splitters can multiply the beam; beyond this many branches the rest are dropped. */
+export const MAX_BRANCHES = 16;
 /** Objects only react when the beam crosses the middle of their tile, not when it clips a corner. */
 const OBJECT_CORE_HALF_SIZE = 0.5;
 const TIE = 1e-9;
@@ -85,9 +87,19 @@ interface Crossing {
   cell: Point;
 }
 
+interface Branch {
+  position: Point;
+  direction: Direction;
+  tile: Point;
+}
+
 class BeamTracer {
   private readonly paths: Point[][] = [];
+  private readonly ends: BeamEnd[] = [];
+  private readonly endPoints: Point[] = [];
+  private readonly turned: Point[] = [];
   private readonly visited = new Set<string>();
+  private readonly branches: Branch[] = [];
   private position: Point;
   private direction: Direction;
   private currentTile: Point;
@@ -103,15 +115,28 @@ class BeamTracer {
     this.currentTile = start.tile;
     this.position = tileCenter(start.tile);
     this.direction = start.direction;
-    this.paths.push([this.position]);
+    this.branches.push({ position: this.position, direction: this.direction, tile: start.tile });
   }
 
   run(): BeamTrace {
+    for (let traced = 0; traced < MAX_BRANCHES && this.branches.length > 0; traced++) {
+      const branch = this.branches.shift()!;
+      this.position = branch.position;
+      this.direction = branch.direction;
+      this.currentTile = branch.tile;
+      this.paths.push([this.position]);
+      this.ends.push(this.traceBranch());
+      this.endPoints.push(this.position);
+    }
+    return { paths: this.paths, end: this.ends[0], ends: this.ends, endPoints: this.endPoints, turned: this.turned };
+  }
+
+  private traceBranch(): BeamEnd {
     for (let crossing = 0; crossing < MAX_CROSSINGS && this.pointCount < MAX_BEAM_POINTS; crossing++) {
       const end = this.advanceToNextCell();
-      if (end) return { paths: this.paths, end };
+      if (end) return end;
     }
-    return { paths: this.paths, end: { kind: 'loop' } };
+    return { kind: 'loop' };
   }
 
   private advanceToNextCell(): BeamEnd | null {
@@ -184,37 +209,36 @@ class BeamTracer {
     if (this.stopAt?.(tilePosition)) {
       return { kind: 'stopped', tile: tilePosition, direction: this.direction };
     }
-    const tile = tileAt(this.board, tilePosition)!;
-    switch (tile.kind) {
-      case 'mirror':
-        return this.turnAtCenter(tilePosition, reflectOffMirror(this.direction, tile.rotation));
-      case 'refractor':
-        return this.turnAtCenter(tilePosition, tile.direction);
-      case 'polarizer':
-        return this.passPolarizer(tilePosition, tile);
-      case 'fibre':
-        return this.teleportFrom(tilePosition, tile.channel);
-      case 'pod':
-      case 'mine':
-      case 'emitter':
-      case 'receiver':
-        this.addPoint(this.position);
-        return { kind: tile.kind, tile: tilePosition };
-      default:
+    const interaction = interact(tileAt(this.board, tilePosition)!, this.direction);
+    switch (interaction.type) {
+      case 'pass':
         return null;
+      case 'turn':
+        return this.turnAtCenter(tilePosition, interaction.direction);
+      case 'split':
+        return this.split(tilePosition, interaction.directions);
+      case 'teleport':
+        return this.teleportFrom(tilePosition, interaction.channel);
+      case 'stop':
+        this.addPoint(this.position);
+        return interaction.end === 'absorbed' ? { kind: 'absorbed' } : { kind: interaction.end, tile: tilePosition };
     }
   }
 
-  private passPolarizer(tilePosition: Point, tile: Extract<Tile, { kind: 'polarizer' }>): BeamEnd | null {
-    if (this.direction % 8 === tile.axis) return null;
-    if (tile.reflects) return this.turnAtCenter(tilePosition, reflectOffMirror(this.direction, tile.axis * 2));
-    this.addPoint(this.position);
-    return { kind: 'absorbed' };
+  /** The beam carries on in the first direction; the second becomes a new branch from the same centre. */
+  private split(tilePosition: Point, [onward, branch]: [Direction, Direction]): BeamEnd | null {
+    const key = `split:${tilePosition.x},${tilePosition.y},${branch}`;
+    if (!this.visited.has(key)) {
+      this.visited.add(key);
+      this.branches.push({ position: tileCenter(tilePosition), direction: branch, tile: tilePosition });
+    }
+    return this.turnAtCenter(tilePosition, onward);
   }
 
   /** Mirrors, refractors and reflecting polarisers send the beam on from their centre. */
   private turnAtCenter(tilePosition: Point, direction: Direction): BeamEnd | null {
     this.moveTo(tileCenter(tilePosition));
+    this.turned.push(tilePosition);
     this.direction = direction;
     return this.recordState(`${tilePosition.x},${tilePosition.y}`);
   }

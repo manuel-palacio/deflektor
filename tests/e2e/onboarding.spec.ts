@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { TRAINING_LEVELS } from '../../src/engine/training';
+import { TRAINING_LEVELS } from './levelData';
 import { gameState, mirrorRotation, turnMirrorTo, waitForLaser } from './helpers';
 
 test.beforeEach(async ({ page }) => {

@@ -1,0 +1,18 @@
+{
+  "id": "training-4",
+  "name": "Danger",
+  "lesson": "Keep the beam off mines, and never send it back into the laser.",
+  "emitter": "right",
+  "energySeconds": 240,
+  "tiles": [
+    "...............",
+    "...o.....R.....",
+    "...............",
+    "...............",
+    "E..8..x........",
+    "...............",
+    "...............",
+    "...o...........",
+    "..............."
+  ]
+}

@@ -25,6 +25,8 @@ export type SoundName =
   | 'levelComplete'
   | 'lifeLost'
   | 'alarm'
+  | 'locked'
+  | 'shatter'
   | 'uiClick';
 
 /**
@@ -105,6 +107,18 @@ export class Sound {
     this.effect('connect', () => {
       this.tone({ type: 'sine', from: 880, to: 880, duration: 0.12, volume: 0.07 });
       this.tone({ type: 'sine', from: 1318.5, to: 1318.5, duration: 0.2, volume: 0.06, delay: 0.06 });
+    });
+  }
+
+  /** A dull buzz: that mirror has no turns left. */
+  locked(): void {
+    this.effect('locked', () => this.tone({ type: 'square', from: 140, to: 110, duration: 0.12, volume: 0.06 }));
+  }
+
+  shatter(): void {
+    this.effect('shatter', () => {
+      this.noise(0.35, 0.16, 7000);
+      this.tone({ type: 'triangle', from: 2400, to: 600, duration: 0.25, volume: 0.05 });
     });
   }
 

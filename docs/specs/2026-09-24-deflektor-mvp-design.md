@@ -80,6 +80,26 @@ Not recoverable from screenshots: which static mirrors actually rotate on their 
 - `tests/support/solver.ts`: breadth-first search over (piece, incoming direction) with verification. It proves every level is solvable and feeds the e2e tests.
 - In dev builds, `window.__deflektor` exposes the app for Playwright.
 
+## Challenge pieces
+
+Parameterised pieces live in a level file's `pieces` list (see `levels/README.md`) and are implemented as
+behaviours in `src/engine/pieces.ts`; the tracer only knows pass / turn / split / stop / teleport:
+
+- **Splitter**: the beam continues and a reflected branch starts at the tile centre (up to 16 branches).
+- **One-way mirror**: reflects off its bright face, passes from behind; player-rotatable.
+- **Limited turns / fragile mirrors**: turns run out (undo refunds them); fragile mirrors shatter after
+  1.5 s of reflecting the beam.
+- **Moving cells**: patrol a row or column, turning round at anything but empty space.
+- **Timed levels**: `timeLimitSeconds` costs a life when it runs out.
+
+## Scoring and replay
+
+Par comes from the solver (fewest clicks × 1.5 + 1; time from the work involved). Stars: ★ solved,
+★★ within the turn limit, ★★★ also within the time limit with no restarts or hints. Best score, time and
+stars, plays and completions are saved per level. The daily challenge (`src/engine/challenge.ts`) draws a
+layout from a seeded random source and keeps it only if it is valid and solvable, so a seed always gives
+the same level; results can be shared as a code in the challenge link.
+
 ## Not yet done
 
 Levels 16–60, gremlins, and overload from an overly long beam.

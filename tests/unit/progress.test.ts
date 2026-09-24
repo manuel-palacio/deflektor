@@ -17,6 +17,7 @@ describe('ProgressStore', () => {
       highScore: 0,
       trainingDone: false,
       records: {},
+      challengeBests: {},
       settings: DEFAULT_SETTINGS,
     });
   });
@@ -111,5 +112,13 @@ describe('ProgressStore', () => {
     );
     store.recordScore(900);
     expect(store.current.highScore).toBe(900);
+  });
+
+  it('keeps the best score for each challenge seed', () => {
+    const storage = memoryStorage();
+    const store = new ProgressStore(storage, 12);
+    expect(store.recordChallenge('daily-2026-09-24', 900)).toBe(true);
+    expect(store.recordChallenge('daily-2026-09-24', 800)).toBe(false);
+    expect(new ProgressStore(storage, 12).current.challengeBests).toEqual({ 'daily-2026-09-24': 900 });
   });
 });

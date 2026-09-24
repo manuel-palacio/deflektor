@@ -69,6 +69,12 @@ export function explainFailure(reason: LifeLostReason): FailureSummary {
         explanation: 'The laser ran dry before the level was cleared.',
         advice: 'Plan the route while the laser charges, and take the shortest way to each cell.',
       };
+    case 'time':
+      return {
+        title: 'Out of time',
+        explanation: 'This is a timed challenge, and the clock ran out.',
+        advice: 'Use the charging time to plan, and go for the cells nearest the beam first.',
+      };
   }
 }
 

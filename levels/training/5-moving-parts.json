@@ -1,0 +1,18 @@
+{
+  "id": "training-5",
+  "name": "Moving parts",
+  "lesson": "Striped polarisers turn by themselves: wait until they line up. Prisms scatter the beam at random.",
+  "emitter": "right",
+  "energySeconds": 240,
+  "tiles": [
+    "...............",
+    "...........o...",
+    "...............",
+    "...............",
+    "E...p...o..*..o",
+    "...............",
+    "...............",
+    "...........o...",
+    "...........R..."
+  ]
+}

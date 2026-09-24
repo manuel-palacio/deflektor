@@ -713,3 +713,150 @@ body.reduced-motion *::after {
     animation: none;
   }
 }
+
+/* ---------- Level editor (development only) ---------- */
+
+body.editing {
+  overflow: auto;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+body.editing #stage,
+body.editing #coach {
+  display: none;
+}
+
+.editor {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.editor-header h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 22px;
+  color: var(--cyan);
+}
+
+.editor-body {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+}
+
+.editor-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-palette button,
+.editor-actions button {
+  min-height: 36px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-edge);
+  background: #150f3a;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-palette button[aria-pressed='true'] {
+  border-color: var(--cyan);
+  background: #1d3a55;
+}
+
+.editor-board {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  grid-template-rows: repeat(18, 1fr);
+  aspect-ratio: 15 / 9;
+  background-color: #0c0826;
+  background-image:
+    linear-gradient(to right, #1d1648 1px, transparent 1px),
+    linear-gradient(to bottom, #1d1648 1px, transparent 1px);
+  background-size: calc(100% / 15) calc(100% / 9);
+  border: 2px solid var(--violet);
+  cursor: crosshair;
+}
+
+.editor-brick {
+  margin: 2px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.brick-purple {
+  background: #5b44d6;
+}
+
+.brick-blue {
+  background: #10697f;
+}
+
+.brick-gate {
+  background: #9ff4ff;
+  opacity: 0.6;
+}
+
+.editor-tile {
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.tile-piece {
+  color: var(--text);
+}
+
+.tile-special {
+  color: var(--amber);
+}
+
+.editor-fields,
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.editor-fields input,
+.editor-fields select {
+  min-height: 32px;
+  background: #150f3a;
+  color: var(--text);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.editor-report {
+  min-height: 24px;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+}
+
+.editor-report.ok {
+  color: var(--green);
+}
+
+.editor-report.problem {
+  color: var(--red);
+}
+
+#editor-json {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  background: #0c0826;
+  color: var(--text);
+  border: 1px solid var(--panel-edge);
+}
