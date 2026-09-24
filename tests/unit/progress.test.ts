@@ -1,22 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { ProgressStore } from '../../src/app/progress';
+import { DEFAULT_SETTINGS, ProgressStore, SAVE_KEY, SAVE_VERSION } from '../../src/app/progress';
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
   return {
+    values,
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => void values.set(key, value),
   };
 }
 
 describe('ProgressStore', () => {
-  it('starts with only the first level unlocked', () => {
+  it('starts with only the first level unlocked and default settings', () => {
     expect(new ProgressStore(memoryStorage(), 12).current).toEqual({
       unlockedLevels: 1,
       highScore: 0,
-      muted: false,
       trainingDone: false,
-      bestLevelScores: {},
+      records: {},
+      settings: DEFAULT_SETTINGS,
     });
   });
 
@@ -33,21 +34,68 @@ describe('ProgressStore', () => {
     expect(store.current.unlockedLevels).toBe(3);
   });
 
-  it('keeps only the best score', () => {
+  it('keeps only the best run score', () => {
     const store = new ProgressStore(memoryStorage(), 12);
     store.recordScore(500);
     store.recordScore(200);
     expect(store.current.highScore).toBe(500);
   });
 
-  it('persists the mute setting', () => {
+  it('persists audio and display settings between sessions', () => {
     const storage = memoryStorage();
-    new ProgressStore(storage, 12).setMuted(true);
-    expect(new ProgressStore(storage, 12).current.muted).toBe(true);
+    new ProgressStore(storage, 12).updateSettings({ musicVolume: 0.2, effectsVolume: 0.9, muted: true, highContrast: true });
+    expect(new ProgressStore(storage, 12).settings).toMatchObject({
+      musicVolume: 0.2,
+      effectsVolume: 0.9,
+      muted: true,
+      highContrast: true,
+    });
+  });
+
+  it('writes a versioned save', () => {
+    const storage = memoryStorage();
+    new ProgressStore(storage, 12).completeTraining();
+    expect(JSON.parse(storage.values.get(SAVE_KEY)!)).toMatchObject({ version: SAVE_VERSION, trainingDone: true });
+  });
+
+  it('counts plays and completions and reports new bests', () => {
+    const storage = memoryStorage();
+    const store = new ProgressStore(storage, 12);
+    store.recordPlay(1);
+    store.recordPlay(1);
+    expect(store.recordCompletion(1, { score: 1500, seconds: 40, stars: 2 })).toEqual({ score: true, time: true, stars: true });
+    expect(store.recordCompletion(1, { score: 1200, seconds: 30, stars: 2 })).toEqual({ score: false, time: true, stars: false });
+    expect(new ProgressStore(storage, 12).current.records[1]).toEqual({
+      plays: 2,
+      completions: 2,
+      bestScore: 1500,
+      bestSeconds: 30,
+      bestStars: 2,
+    });
+  });
+
+  it('migrates a version 1 save: progress, mute setting and best scores survive', () => {
+    const legacy = JSON.stringify({ unlockedLevels: 3, highScore: 10, muted: true, trainingDone: true, bestLevelScores: { 2: 900 } });
+    const store = new ProgressStore(memoryStorage({ 'deflektor.progress.v1': legacy }), 12);
+    expect(store.current).toMatchObject({
+      unlockedLevels: 3,
+      highScore: 10,
+      trainingDone: true,
+      records: { 2: { bestScore: 900, completions: 1 } },
+      settings: { ...DEFAULT_SETTINGS, muted: true },
+    });
+  });
+
+  it('fills in settings added after a save was written', () => {
+    const partial = JSON.stringify({ version: 2, unlockedLevels: 2, settings: { musicVolume: 0.1 } });
+    expect(new ProgressStore(memoryStorage({ [SAVE_KEY]: partial }), 12).settings).toEqual({
+      ...DEFAULT_SETTINGS,
+      musicVolume: 0.1,
+    });
   });
 
   it('falls back to defaults when stored data is corrupt', () => {
-    const store = new ProgressStore(memoryStorage({ 'deflektor.progress.v1': '{oops' }), 12);
+    const store = new ProgressStore(memoryStorage({ [SAVE_KEY]: '{oops' }), 12);
     expect(store.current.unlockedLevels).toBe(1);
   });
 
@@ -63,25 +111,5 @@ describe('ProgressStore', () => {
     );
     store.recordScore(900);
     expect(store.current.highScore).toBe(900);
-  });
-
-  it('remembers that training was completed', () => {
-    const storage = memoryStorage();
-    new ProgressStore(storage, 12).completeTraining();
-    expect(new ProgressStore(storage, 12).current.trainingDone).toBe(true);
-  });
-
-  it('reports a new record only when a level score beats the previous best', () => {
-    const storage = memoryStorage();
-    const store = new ProgressStore(storage, 12);
-    expect(store.recordLevelScore(1, 1500)).toBe(true);
-    expect(store.recordLevelScore(1, 1200)).toBe(false);
-    expect(store.recordLevelScore(1, 1800)).toBe(true);
-    expect(new ProgressStore(storage, 12).current.bestLevelScores).toEqual({ 1: 1800 });
-  });
-
-  it('keeps older saves working when new fields are added', () => {
-    const old = memoryStorage({ 'deflektor.progress.v1': JSON.stringify({ unlockedLevels: 3, highScore: 10, muted: true }) });
-    expect(new ProgressStore(old, 12).current).toMatchObject({ unlockedLevels: 3, trainingDone: false, bestLevelScores: {} });
   });
 });

@@ -302,4 +302,41 @@ describe('Game', () => {
       });
     });
   });
+
+  describe('undo and redo', () => {
+    const twoMirrors = level(['E..8..8', '', '', '', '', '', '', '', 'R']);
+
+    it('takes back turns in reverse order and replays them', () => {
+      const game = new Game([twoMirrors], NO_CHARGE);
+      game.rotateMirror({ x: 3, y: 0 }, 1);
+      game.rotateMirror({ x: 6, y: 0 }, -2);
+      game.undo();
+      expect(game.board.tiles[0][6]).toMatchObject({ rotation: 8 });
+      game.undo();
+      expect(game.board.tiles[0][3]).toMatchObject({ rotation: 8 });
+      expect(game.canUndo).toBe(false);
+      game.redo();
+      game.redo();
+      expect(game.board.tiles[0][3]).toMatchObject({ rotation: 9 });
+      expect(game.board.tiles[0][6]).toMatchObject({ rotation: 6 });
+      expect(game.canRedo).toBe(false);
+    });
+
+    it('forgets the redo trail once the player makes a new turn', () => {
+      const game = new Game([twoMirrors], NO_CHARGE);
+      game.rotateMirror({ x: 3, y: 0 }, 1);
+      game.undo();
+      game.rotateMirror({ x: 6, y: 0 }, 1);
+      expect(game.canRedo).toBe(false);
+    });
+
+    it('still counts undone turns as moves and clears history on restart', () => {
+      const game = new Game([twoMirrors], NO_CHARGE);
+      game.rotateMirror({ x: 3, y: 0 }, 1);
+      game.undo();
+      expect(game.stats.rotations).toBe(2);
+      game.restartLevel();
+      expect(game.canUndo).toBe(false);
+    });
+  });
 });

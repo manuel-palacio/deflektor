@@ -30,6 +30,29 @@ body {
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  /* No pull-to-refresh, rubber-banding or double-tap zoom while playing. */
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+button,
+input,
+select {
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 3px solid var(--amber);
+  outline-offset: 3px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 [hidden] {
@@ -174,9 +197,15 @@ body {
   text-shadow: 0 0 10px rgba(255, 63, 180, 0.7);
 }
 
+.hud-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Touch targets never shrink below 44 x 44 CSS pixels. */
 .icon-button {
-  width: 38px;
-  height: 38px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 10px;
   border: 1px solid var(--panel-edge);
   background: rgba(20, 14, 56, 0.7);
@@ -193,6 +222,30 @@ body {
 .icon-button.off {
   color: var(--muted);
   text-decoration: line-through;
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.coach {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: rgba(14, 10, 40, 0.88);
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 24px rgba(61, 242, 255, 0.25);
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  z-index: 2;
+  pointer-events: none;
+  animation: fade-in 0.3s ease-out;
 }
 
 /* ---------- Screens ---------- */
@@ -288,7 +341,6 @@ h2 {
 .button:focus-visible {
   border-color: var(--cyan);
   box-shadow: 0 0 22px rgba(61, 242, 255, 0.35);
-  outline: none;
   transform: translateY(-1px);
 }
 
@@ -300,6 +352,160 @@ h2 {
 
 .button.ghost {
   background: transparent;
+}
+
+.button,
+.level-button {
+  min-height: 44px;
+}
+
+.badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--amber);
+  color: #1a1000;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  vertical-align: middle;
+}
+
+/* Results leave the board visible behind them, so it is clear what happened. */
+.screen-result {
+  place-items: end center;
+  background: linear-gradient(to top, rgba(7, 5, 26, 0.9), rgba(7, 5, 26, 0.05) 60%);
+  backdrop-filter: none;
+}
+
+.result-panel {
+  width: min(560px, 100%);
+  gap: 8px;
+  padding: 22px 24px;
+}
+
+.stars {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: 0.2em;
+  color: var(--amber);
+  text-shadow: 0 0 18px rgba(255, 210, 63, 0.6);
+}
+
+.result-lines {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  margin: 0;
+  text-align: left;
+  font-size: 17px;
+}
+
+.result-lines dt {
+  color: var(--muted);
+}
+
+.result-lines dd {
+  margin: 0;
+  font-family: var(--display);
+  font-variant-numeric: tabular-nums;
+}
+
+.result-lines dd.record::after {
+  content: ' NEW';
+  color: var(--green);
+  font-size: 11px;
+}
+
+.record-note {
+  margin: 0;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.result-actions .button {
+  flex: 1 1 140px;
+}
+
+.settings-panel {
+  text-align: left;
+}
+
+.setting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 17px;
+}
+
+.setting-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.setting input[type='range'] {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--cyan);
+}
+
+.setting input[type='checkbox'] {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--cyan);
+}
+
+.setting select {
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-edge);
+  background: #150f3a;
+  color: var(--text);
+  font: inherit;
+}
+
+.level-button .level-stars {
+  font-size: 12px;
+  color: var(--amber);
+  letter-spacing: 0.1em;
+}
+
+/* ---------- High contrast ---------- */
+
+body.high-contrast {
+  --panel: #000;
+  --panel-edge: #fff;
+  --text: #fff;
+  --muted: #e6e6e6;
+}
+
+body.high-contrast .button,
+body.high-contrast .icon-button,
+body.high-contrast .level-button {
+  background: #000;
+  border-width: 2px;
+}
+
+body.high-contrast #hud {
+  background: #000;
+}
+
+/* ---------- Reduced motion ---------- */
+
+body.reduced-motion *,
+body.reduced-motion *::before,
+body.reduced-motion *::after {
+  animation: none !important;
+  transition: none !important;
 }
 
 .help {
@@ -382,7 +588,6 @@ h2 {
 .level-button:focus-visible {
   border-color: var(--cyan);
   box-shadow: 0 0 18px rgba(61, 242, 255, 0.3);
-  outline: none;
 }
 
 .level-button:disabled {
@@ -462,11 +667,6 @@ h2 {
     font-size: 14px;
   }
 
-  .icon-button {
-    width: 34px;
-    height: 34px;
-  }
-
   .panel {
     padding: 24px 18px;
   }
@@ -500,9 +700,7 @@ h2 {
   }
 
   .icon-button {
-    width: 30px;
-    height: 30px;
-    font-size: 12px;
+    font-size: 13px;
   }
 }
 

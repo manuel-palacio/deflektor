@@ -1,14 +1,32 @@
 import { AdvancedBloomFilter } from 'pixi-filters';
 import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { beamState, type BeamState } from '../engine/beamState';
 import type { Game, GameEvent } from '../engine/game';
 import { findTiles } from '../engine/level';
-import type { Point } from '../engine/types';
+import type { BeamTrace, Point } from '../engine/types';
 import { BeamView } from './BeamView';
 import { BoardView } from './BoardView';
 import { Effects } from './Effects';
 import { BoardLayout, placeBoard } from './layout';
 import { PALETTE } from './palette';
+import { QualityGovernor, type EffectsLevel } from './quality';
 import { getGlowTexture } from './textures';
+
+export interface DisplayOptions {
+  reducedMotion: boolean;
+  highContrast: boolean;
+  quality: 'auto' | EffectsLevel;
+}
+
+/** What the renderer is currently showing, for tests and diagnostics. */
+export interface RenderInspection {
+  beamState: BeamState;
+  hover?: Point;
+  hint?: Point;
+  previewShown: boolean;
+  effects: EffectsLevel;
+  rotated: boolean;
+}
 
 const DUST_COUNT = 50;
 
@@ -32,9 +50,19 @@ export class Renderer {
   private readonly background = new Sprite();
   private readonly dust: Dust[] = [];
   private shakeTime = 0;
+  private dustLayer!: Container;
   private flashAlpha = 0;
   private flashColor: number = PALETTE.beamCore;
   private game?: Game;
+  private readonly governor = new QualityGovernor();
+  private readonly bloom = new AdvancedBloomFilter({ threshold: 0.35, bloomScale: 0.9, brightness: 1, blur: 5, quality: 4 });
+  private display: DisplayOptions = { reducedMotion: false, highContrast: false, quality: 'auto' };
+  private effectsLevel: EffectsLevel = 'high';
+  private hover?: Point;
+  private hint?: Point;
+  private preview?: BeamTrace;
+  private lastState: BeamState = 'charging';
+  private lastRoute = '';
 
   private constructor(
     private readonly app: Application,
@@ -69,6 +97,37 @@ export class Renderer {
     this.relayout();
   }
 
+  setDisplay(options: DisplayOptions): void {
+    const contrastChanged = options.highContrast !== this.display.highContrast;
+    this.display = { ...options };
+    this.governor.setPreference(options.quality);
+    this.effects.setScale(options.reducedMotion ? 0.35 : 1);
+    if (contrastChanged && this.game) this.board.build(this.game.board, this.layout, options.highContrast);
+  }
+
+  /** Highlights the hovered mirror and ghosts where its next turn would send the beam. */
+  setHover(tile: Point | undefined, preview: BeamTrace | undefined): void {
+    this.hover = tile;
+    this.preview = preview;
+    this.board.setHover(tile);
+  }
+
+  setHint(tile: Point | undefined): void {
+    this.hint = tile;
+    this.board.setHint(tile);
+  }
+
+  inspect(): RenderInspection {
+    return {
+      beamState: this.lastState,
+      hover: this.hover,
+      hint: this.hint,
+      previewShown: this.preview !== undefined,
+      effects: this.effectsLevel,
+      rotated: this.rotated,
+    };
+  }
+
   /** Recomputes the layout for the current canvas size and HUD height. */
   relayout(): void {
     const placement = placeBoard(this.app.screen.width, this.app.screen.height, this.reservedTop());
@@ -77,7 +136,7 @@ export class Renderer {
     this.frame.rotation = placement.rotated ? Math.PI / 2 : 0;
     this.frame.position.set(placement.offset.x, placement.offset.y);
     this.paintBackground();
-    if (this.game) this.board.build(this.game.board, this.layout);
+    if (this.game) this.board.build(this.game.board, this.layout, this.display.highContrast);
   }
 
   /** The board tile under a point on the canvas, if any. */
@@ -101,7 +160,9 @@ export class Renderer {
     switch (event.type) {
       case 'levelStarted':
         this.effects.clear();
-        this.board.build(game.board, this.layout);
+        this.setHover(undefined, undefined);
+        this.setHint(undefined);
+        this.board.build(game.board, this.layout, this.display.highContrast);
         this.effects.shockwave(this.tilePixel(findTiles(game.board, 'emitter')[0]), PALETTE.beam, size * 3);
         break;
       case 'podDestroyed': {
@@ -109,6 +170,17 @@ export class Renderer {
         this.board.removePod(event.tile);
         this.effects.burst(at, PALETTE.pod, 45, size * 7, size * 0.35);
         this.effects.shockwave(at, PALETTE.pod, size * 1.6, 0.45);
+        break;
+      }
+      case 'mirrorRotated':
+        this.effects.shockwave(this.tilePixel(event.tile), PALETTE.mirrorPlate, size * 0.7, 0.25);
+        if (this.hint && event.tile.x === this.hint.x && event.tile.y === this.hint.y) this.setHint(undefined);
+        break;
+      case 'beamConnected': {
+        const at = this.tilePixel(event.tile);
+        this.effects.burst(at, PALETTE.beamTarget, 16, size * 4, size * 0.25);
+        this.effects.shockwave(at, PALETTE.beamTarget, size * 1.2, 0.35);
+        this.beam.flash();
         break;
       }
       case 'receiverOpened':
@@ -119,7 +191,7 @@ export class Renderer {
         const at = this.tilePixel(findTiles(game.board, 'receiver')[0]);
         this.effects.burst(at, PALETTE.receiverOpen, 140, size * 14, size * 0.45);
         this.effects.shockwave(at, PALETTE.receiverOpen, size * 12, 1.2);
-        this.flashScreen(PALETTE.receiverOpen, 0.3);
+        if (!this.display.reducedMotion) this.flashScreen(PALETTE.receiverOpen, 0.3);
         break;
       }
       case 'lifeLost': {
@@ -127,33 +199,54 @@ export class Renderer {
         const at = this.layout.beamToPixels(beamEnd);
         this.effects.burst(at, PALETTE.beamHot, 90, size * 10, size * 0.45);
         this.effects.shockwave(at, PALETTE.beamHot, size * 6, 0.8);
-        this.shakeTime = 0.6;
-        this.flashScreen(PALETTE.beamHot, 0.4);
+        if (!this.display.reducedMotion) {
+          this.shakeTime = 0.6;
+          this.flashScreen(PALETTE.beamHot, 0.4);
+        }
         break;
       }
     }
   }
 
   render(game: Game, seconds: number, cursorTile?: Point): void {
+    this.applyEffectsLevel(this.governor.sample(seconds));
+    this.lastState = beamState(game);
     this.board.update(game, seconds, cursorTile);
-    if (game.isCharging) {
+    if (this.lastState === 'charging') {
       this.beam.drawAiming(game.beam, this.layout, seconds);
     } else {
-      const beamEnd = this.beam.draw(game.beam, this.layout, game.overload, seconds);
+      this.pulseOnRouteChange(game.beam);
+      const style = { light: this.effectsLevel === 'low', highContrast: this.display.highContrast };
+      const beamEnd = this.beam.draw(game.beam, this.layout, this.lastState, game.overload, seconds, style);
       if (game.phase === 'playing') this.effects.sparks(beamEnd, PALETTE.beamCore, this.layout.tileSize, seconds);
     }
+    this.beam.drawPreview(this.preview, this.layout);
     this.effects.update(seconds);
     this.updateDust(seconds);
     this.updateShake(seconds);
     this.updateFlash(seconds);
   }
 
+  /** A subtle brightening whenever the beam takes a new route. */
+  private pulseOnRouteChange(beam: BeamTrace): void {
+    const route = beam.paths.map((path) => path.map((point) => `${point.x},${point.y}`).join(' ')).join('|');
+    if (this.lastRoute && route !== this.lastRoute) this.beam.flash();
+    this.lastRoute = route;
+  }
+
+  private applyEffectsLevel(level: EffectsLevel): void {
+    if (level === this.effectsLevel) return;
+    this.effectsLevel = level;
+    this.world.filters = level === 'high' ? [this.bloom] : [];
+    this.effects.setBudget(level === 'high' ? 1 : 0.4);
+  }
+
   private assembleStage(): void {
-    const bloom = new AdvancedBloomFilter({ threshold: 0.3, bloomScale: 1.1, brightness: 1, blur: 6, quality: 5 });
-    this.world.filters = [bloom];
+    this.world.filters = [this.bloom];
     this.world.addChild(this.board.container, this.beam.container, this.effects.container);
     this.frame.addChild(this.world);
-    this.app.stage.addChild(this.background, this.createDust(), this.frame, this.flash);
+    this.dustLayer = this.createDust();
+    this.app.stage.addChild(this.background, this.dustLayer, this.frame, this.flash);
     this.app.renderer.on('resize', () => this.relayout());
   }
 
@@ -193,6 +286,8 @@ export class Renderer {
 
   private updateDust(seconds: number): void {
     const { width, height } = this.app.screen;
+    this.dustLayer.visible = !this.display.reducedMotion;
+    if (this.display.reducedMotion) return;
     for (const mote of this.dust) {
       mote.drift += seconds * 0.3;
       mote.sprite.y -= mote.speed * seconds;

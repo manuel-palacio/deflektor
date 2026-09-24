@@ -6,25 +6,50 @@ const PAD_CHORDS = [
   [98, 123.47, 146.83],
 ];
 const PAD_CHORD_SECONDS = 6;
+const MASTER_LEVEL = 0.6;
+
+export interface AudioSettings {
+  muted: boolean;
+  /** 0..1 */
+  musicVolume: number;
+  /** 0..1 */
+  effectsVolume: number;
+}
+
+export type SoundName =
+  | 'chargeUp'
+  | 'mirrorTick'
+  | 'connect'
+  | 'podPop'
+  | 'gateOpen'
+  | 'levelComplete'
+  | 'lifeLost'
+  | 'alarm'
+  | 'uiClick';
 
 /**
- * Every sound is synthesized with Web Audio: no asset files. The context is created on the
- * first user gesture because browsers refuse to start audio before one.
+ * Every sound is synthesized with Web Audio: no asset files. Music and effects run through separate
+ * buses so each has its own volume. The context is created on the first user gesture because
+ * browsers refuse to start audio before one.
  */
 export class Sound {
+  /** Names of the effects triggered so far (newest last), so feedback can be verified in tests. */
+  readonly played: SoundName[] = [];
   private context?: AudioContext;
   private master?: GainNode;
+  private musicBus?: GainNode;
+  private effectsBus?: GainNode;
   private hum?: { gain: GainNode; filter: BiquadFilterNode; oscillator: OscillatorNode };
   private padVoices: OscillatorNode[] = [];
   private alarmCooldown = 0;
-  private muted: boolean;
+  private settings: AudioSettings;
 
-  constructor(muted: boolean) {
-    this.muted = muted;
+  constructor(settings: AudioSettings) {
+    this.settings = { ...settings };
   }
 
   get isMuted(): boolean {
-    return this.muted;
+    return this.settings.muted;
   }
 
   unlock(): void {
@@ -34,15 +59,19 @@ export class Sound {
     }
     this.context = new AudioContext();
     this.master = this.context.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.6;
+    this.musicBus = this.context.createGain();
+    this.effectsBus = this.context.createGain();
+    this.musicBus.connect(this.master);
+    this.effectsBus.connect(this.master);
     this.master.connect(this.context.destination);
+    this.applySettings();
     this.startHum();
     this.startPad();
   }
 
-  setMuted(muted: boolean): void {
-    this.muted = muted;
-    if (this.master && this.context) this.master.gain.setTargetAtTime(muted ? 0 : 0.6, this.context.currentTime, 0.05);
+  update(settings: Partial<AudioSettings>): void {
+    this.settings = { ...this.settings, ...settings };
+    this.applySettings();
   }
 
   /** The laser drone: louder while firing, brighter and higher as overload builds. */
@@ -54,37 +83,73 @@ export class Sound {
     this.hum.oscillator.frequency.setTargetAtTime(55 + overload * 55, now, 0.1);
     this.alarmCooldown -= seconds;
     if (active && overload > 0.45 && this.alarmCooldown <= 0) {
-      this.tone({ type: 'square', from: 880, to: 880, duration: 0.07, volume: 0.05 });
+      this.effect('alarm', () => this.tone({ type: 'square', from: 880, to: 880, duration: 0.07, volume: 0.05 }));
       this.alarmCooldown = 0.45 - overload * 0.3;
     }
   }
 
   chargeUp(): void {
-    this.tone({ type: 'sawtooth', from: 110, to: 880, duration: 1.9, volume: 0.05 });
+    this.effect('chargeUp', () => this.tone({ type: 'sawtooth', from: 110, to: 880, duration: 1.9, volume: 0.05 }));
   }
 
+  /** A short mechanical ratchet: a click of noise over a falling blip. */
   mirrorTick(): void {
-    this.tone({ type: 'triangle', from: 1400, to: 900, duration: 0.03, volume: 0.05 });
+    this.effect('mirrorTick', () => {
+      this.tone({ type: 'triangle', from: 1500, to: 800, duration: 0.035, volume: 0.06 });
+      this.noise(0.025, 0.05, 6000);
+    });
+  }
+
+  /** The beam has just been lined up on something worth hitting. */
+  connect(): void {
+    this.effect('connect', () => {
+      this.tone({ type: 'sine', from: 880, to: 880, duration: 0.12, volume: 0.07 });
+      this.tone({ type: 'sine', from: 1318.5, to: 1318.5, duration: 0.2, volume: 0.06, delay: 0.06 });
+    });
   }
 
   podPop(): void {
-    this.tone({ type: 'sine', from: 300, to: 1300, duration: 0.18, volume: 0.18 });
-    this.noise(0.12, 0.08, 3000);
+    this.effect('podPop', () => {
+      this.tone({ type: 'sine', from: 300, to: 1300, duration: 0.18, volume: 0.18 });
+      this.noise(0.12, 0.08, 3000);
+    });
+  }
+
+  gateOpen(): void {
+    this.effect('gateOpen', () => this.tone({ type: 'triangle', from: 220, to: 660, duration: 0.5, volume: 0.1 }));
   }
 
   levelComplete(): void {
-    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((frequency, index) =>
-      this.tone({ type: 'triangle', from: frequency, to: frequency, duration: 0.35, volume: 0.12, delay: index * 0.09 }),
+    this.effect('levelComplete', () =>
+      [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((frequency, index) =>
+        this.tone({ type: 'triangle', from: frequency, to: frequency, duration: 0.35, volume: 0.12, delay: index * 0.09 }),
+      ),
     );
   }
 
   lifeLost(): void {
-    this.tone({ type: 'sawtooth', from: 440, to: 55, duration: 0.9, volume: 0.15 });
-    this.noise(0.6, 0.18, 900);
+    this.effect('lifeLost', () => {
+      this.tone({ type: 'sawtooth', from: 440, to: 55, duration: 0.9, volume: 0.15 });
+      this.noise(0.6, 0.18, 900);
+    });
   }
 
   uiClick(): void {
-    this.tone({ type: 'sine', from: 660, to: 990, duration: 0.06, volume: 0.06 });
+    this.effect('uiClick', () => this.tone({ type: 'sine', from: 660, to: 990, duration: 0.06, volume: 0.06 }));
+  }
+
+  private effect(name: SoundName, play: () => void): void {
+    this.played.push(name);
+    if (this.played.length > 50) this.played.shift();
+    play();
+  }
+
+  private applySettings(): void {
+    if (!this.context || !this.master || !this.musicBus || !this.effectsBus) return;
+    const now = this.context.currentTime;
+    this.master.gain.setTargetAtTime(this.settings.muted ? 0 : MASTER_LEVEL, now, 0.05);
+    this.musicBus.gain.setTargetAtTime(this.settings.musicVolume, now, 0.05);
+    this.effectsBus.gain.setTargetAtTime(this.settings.effectsVolume, now, 0.05);
   }
 
   private startHum(): void {
@@ -97,7 +162,7 @@ export class Sound {
     filter.frequency.value = 300;
     const gain = context.createGain();
     gain.gain.value = 0;
-    oscillator.connect(filter).connect(gain).connect(this.master!);
+    oscillator.connect(filter).connect(gain).connect(this.effectsBus!);
     oscillator.start();
     this.hum = { gain, filter, oscillator };
   }
@@ -109,7 +174,7 @@ export class Sound {
     filter.frequency.value = 700;
     const gain = context.createGain();
     gain.gain.value = 0.045;
-    filter.connect(gain).connect(this.master!);
+    filter.connect(gain).connect(this.musicBus!);
     const lfo = context.createOscillator();
     const lfoDepth = context.createGain();
     lfo.frequency.value = 0.07;
@@ -144,7 +209,7 @@ export class Sound {
     volume: number;
     delay?: number;
   }): void {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.effectsBus) return;
     const start = this.context.currentTime + (options.delay ?? 0);
     const oscillator = this.context.createOscillator();
     oscillator.type = options.type;
@@ -153,13 +218,13 @@ export class Sound {
     const gain = this.context.createGain();
     gain.gain.setValueAtTime(options.volume, start);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + options.duration);
-    oscillator.connect(gain).connect(this.master);
+    oscillator.connect(gain).connect(this.effectsBus);
     oscillator.start(start);
     oscillator.stop(start + options.duration + 0.02);
   }
 
   private noise(duration: number, volume: number, cutoff: number): void {
-    if (!this.context || !this.master) return;
+    if (!this.context || !this.effectsBus) return;
     const length = Math.floor(this.context.sampleRate * duration);
     const buffer = this.context.createBuffer(1, length, this.context.sampleRate);
     const samples = buffer.getChannelData(0);
@@ -173,7 +238,7 @@ export class Sound {
     const now = this.context.currentTime;
     gain.gain.setValueAtTime(volume, now);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    source.connect(filter).connect(gain).connect(this.master);
+    source.connect(filter).connect(gain).connect(this.effectsBus);
     source.start();
   }
 }

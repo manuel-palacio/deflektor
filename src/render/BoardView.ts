@@ -37,13 +37,17 @@ export class BoardView {
   private readonly cursor = new Graphics();
   private layout!: BoardLayout;
   private clock = 0;
+  private hoverTile?: Point;
+  private hintTile?: Point;
+  private highContrast = false;
 
   constructor() {
     this.container.addChild(this.base, this.walls.container, this.pieces, this.cursor);
   }
 
-  build(board: Board, layout: BoardLayout): void {
+  build(board: Board, layout: BoardLayout, highContrast = this.highContrast): void {
     this.layout = layout;
+    this.highContrast = highContrast;
     for (const child of [...this.base.removeChildren(), ...this.pieces.removeChildren()]) {
       child.destroy({ children: true });
     }
@@ -52,7 +56,7 @@ export class BoardView {
     this.pods.clear();
     this.mines.clear();
     this.base.addChild(this.drawBoardBase());
-    this.walls.build(board.walls, layout);
+    this.walls.build(board.walls, layout, highContrast);
     board.tiles.forEach((row, y) => row.forEach((tile, x) => this.addTile(tile, { x, y })));
   }
 
@@ -64,6 +68,16 @@ export class BoardView {
     this.animateMines(game.beam.end.kind === 'mine' ? game.beam.end.tile : undefined);
     this.animateReceiver(game.receiverOpen);
     this.drawCursor(cursorTile);
+  }
+
+  /** The mirror under the pointer gets a soft ring. */
+  setHover(tile: Point | undefined): void {
+    this.hoverTile = tile;
+  }
+
+  /** The mirror a hint points to pulses until it has been turned. */
+  setHint(tile: Point | undefined): void {
+    this.hintTile = tile;
   }
 
   removePod(tile: Point): void {
@@ -88,7 +102,7 @@ export class BoardView {
     for (let row = 1; row < 9; row++) {
       base.moveTo(originX, originY + row * tileSize).lineTo(originX + boardWidth, originY + row * tileSize);
     }
-    base.stroke({ width: 1, color: PALETTE.gridLine, alpha: 0.7 });
+    base.stroke({ width: 1, color: this.highContrast ? 0x5a4fa0 : PALETTE.gridLine, alpha: this.highContrast ? 1 : 0.7 });
     base
       .roundRect(originX - 6, originY - 6, boardWidth + 12, boardHeight + 12, 10)
       .stroke({ width: 6, color: PALETTE.frame, alpha: 0.18 })
@@ -204,8 +218,17 @@ export class BoardView {
 
   private drawCursor(tile?: Point): void {
     this.cursor.clear();
-    if (!tile) return;
     const size = this.layout.tileSize;
+    if (this.hoverTile) {
+      const center = this.layout.tileCenter(this.hoverTile);
+      this.cursor.circle(center.x, center.y, size * 0.46).stroke({ width: 2, color: PALETTE.beam, alpha: 0.6 });
+    }
+    if (this.hintTile) {
+      const center = this.layout.tileCenter(this.hintTile);
+      const pulse = 0.5 + Math.abs(Math.sin(this.clock * 5)) * 0.5;
+      this.cursor.circle(center.x, center.y, size * (0.5 + pulse * 0.08)).stroke({ width: 3, color: PALETTE.hint, alpha: pulse });
+    }
+    if (!tile) return;
     const center = this.layout.tileCenter(tile);
     const half = size * 0.5 - 2;
     const arm = size * 0.22;

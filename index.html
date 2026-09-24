@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div id="stage"></div>
+    <div id="stage" role="application" aria-label="Game board. Use the arrow keys to pick a mirror, Space to turn it, Z to turn it back."></div>
 
     <header id="hud" hidden>
       <div class="hud-level">
@@ -26,35 +26,50 @@
       <div class="hud-meters">
         <div class="meter meter-energy">
           <span class="meter-label">Energy</span>
-          <div class="meter-track"><div id="hud-energy" class="meter-fill"></div></div>
+          <div class="meter-track" role="progressbar" aria-label="Energy" aria-valuemin="0" aria-valuemax="100" id="hud-energy-bar">
+            <div id="hud-energy" class="meter-fill"></div>
+          </div>
         </div>
         <div class="meter meter-overload" id="hud-overload-meter">
           <span class="meter-label">Overload</span>
-          <div class="meter-track"><div id="hud-overload" class="meter-fill"></div></div>
+          <div class="meter-track" role="progressbar" aria-label="Overload" aria-valuemin="0" aria-valuemax="100" id="hud-overload-bar">
+            <div id="hud-overload" class="meter-fill"></div>
+          </div>
         </div>
       </div>
       <div class="hud-stats">
-        <div class="stat"><span class="hud-label">Pods</span><span id="hud-pods" class="stat-value">0</span></div>
+        <div class="stat"><span class="hud-label">Cells</span><span id="hud-pods" class="stat-value">0</span></div>
         <div class="stat"><span class="hud-label">Score</span><span id="hud-score" class="stat-value">0</span></div>
-        <div class="stat"><span class="hud-label">Lives</span><span id="hud-lives" class="stat-value lives"></span></div>
-        <button id="hud-mute" class="icon-button" type="button" aria-label="Toggle sound">♪</button>
-        <button id="hud-pause" class="icon-button" type="button" aria-label="Pause">❚❚</button>
+        <div class="stat"><span class="hud-label">Lives</span><span id="hud-lives" class="stat-value lives" aria-label="Lives"></span></div>
+      </div>
+      <div class="hud-actions">
+        <button id="hud-undo" class="icon-button" type="button" aria-label="Undo last turn (Ctrl+Z)" title="Undo (Ctrl+Z)">↶</button>
+        <button id="hud-redo" class="icon-button" type="button" aria-label="Redo turn (Ctrl+Shift+Z)" title="Redo (Ctrl+Shift+Z)">↷</button>
+        <button id="hud-hint" class="icon-button" type="button" aria-label="Show a hint (H). Caps the level at two stars." title="Hint (H)">?</button>
+        <button id="hud-mute" class="icon-button" type="button" aria-label="Toggle sound (M)" title="Sound (M)">♪</button>
+        <button id="hud-pause" class="icon-button" type="button" aria-label="Pause (P)" title="Pause (P)">❚❚</button>
       </div>
     </header>
 
-    <section id="screen-title" class="screen" hidden>
+    <div id="coach" class="coach" role="status" aria-live="polite" hidden></div>
+    <div id="announcer" class="visually-hidden" role="status" aria-live="polite"></div>
+
+    <section id="screen-title" class="screen" hidden aria-labelledby="title-heading">
       <div class="panel title-panel">
-        <h1 class="logo" data-text="DEFLEKTOR">DEFLEKTOR</h1>
-        <p class="tagline">Bend the light. Burn the pods. Don't overload.</p>
+        <h1 id="title-heading" class="logo" data-text="DEFLEKTOR">DEFLEKTOR</h1>
+        <p class="tagline">Bend the light. Burn the cells. Don't overload.</p>
+        <button id="title-training" class="button" type="button">Training <span id="title-training-badge" class="badge">Start here</span></button>
         <button id="title-play" class="button primary" type="button">Play</button>
-        <button id="title-help-toggle" class="button ghost" type="button">How to play</button>
+        <button id="title-settings" class="button ghost" type="button">Settings</button>
+        <button id="title-help-toggle" class="button ghost" type="button" aria-expanded="false" aria-controls="title-help">How to play</button>
         <div id="title-help" class="help" hidden>
           <p>Rotate the mirrors to steer the laser into every <b class="c-pod">cell</b>. When they're all gone, the barriers around the <b class="c-receiver">receiver</b> vanish: guide the beam into it to clear the level.</p>
           <p>Purple bricks reflect the beam, blue bricks absorb it. Prisms scatter it at random, and rotating polarisers only let it through when they line up. Avoid <b class="c-mine">mines</b> and don't reflect the beam back into the laser, or the overload meter climbs. Energy drains all the time, so be quick.</p>
           <ul>
-            <li><b>Click / tap</b> a mirror to turn it clockwise, <b>right-click</b> to turn it back, or hold to spin it. The mouse wheel works too.</li>
+            <li><b>Click / tap</b> a mirror to turn it clockwise, <b>right-click</b> to turn it back, or hold to spin it. The mouse wheel works too. Hovering shows where the next turn would send the beam.</li>
             <li><b>Arrows / WASD</b> jump between mirrors. <b>Space / X</b> rotates, <b>Z</b> rotates back.</li>
-            <li><b>P / Esc</b> pause, <b>M</b> mute.</li>
+            <li><b>Ctrl+Z</b> undo, <b>Ctrl+Shift+Z</b> redo, <b>H</b> hint, <b>R</b> restart, <b>P / Esc</b> pause, <b>M</b> mute.</li>
+            <li>Stars: ★ solve it, ★★ within the turn limit, ★★★ within the turn and time limits without restarts or hints.</li>
           </ul>
         </div>
         <p class="high-score">High score <span id="title-high-score">0</span></p>
@@ -62,29 +77,71 @@
       </div>
     </section>
 
-    <section id="screen-levels" class="screen" hidden>
+    <section id="screen-levels" class="screen" hidden aria-labelledby="levels-heading">
       <div class="panel">
-        <h2>Select level</h2>
+        <h2 id="levels-heading">Select level</h2>
         <div id="level-grid" class="level-grid"></div>
         <button id="levels-back" class="button ghost" type="button">Back</button>
       </div>
     </section>
 
-    <section id="screen-pause" class="screen" hidden>
+    <section id="screen-pause" class="screen" hidden aria-labelledby="pause-heading">
       <div class="panel">
-        <h2>Paused</h2>
+        <h2 id="pause-heading">Paused</h2>
         <button id="pause-resume" class="button primary" type="button">Resume</button>
         <button id="pause-restart" class="button" type="button">Restart level</button>
+        <button id="pause-settings" class="button ghost" type="button">Settings</button>
         <button id="pause-quit" class="button ghost" type="button">Quit to menu</button>
       </div>
     </section>
 
-    <section id="screen-message" class="screen" hidden>
-      <div class="panel">
+    <section id="screen-settings" class="screen" hidden aria-labelledby="settings-heading">
+      <div class="panel settings-panel">
+        <h2 id="settings-heading">Settings</h2>
+        <label class="setting">
+          <span>Music volume</span>
+          <input id="setting-music" type="range" min="0" max="100" step="5" />
+        </label>
+        <label class="setting">
+          <span>Effects volume</span>
+          <input id="setting-effects" type="range" min="0" max="100" step="5" />
+        </label>
+        <label class="setting setting-toggle">
+          <input id="setting-hints" type="checkbox" />
+          <span>Show tips while playing</span>
+        </label>
+        <label class="setting setting-toggle">
+          <input id="setting-reduced-motion" type="checkbox" />
+          <span>Reduce motion (no shake, flashes or drifting particles)</span>
+        </label>
+        <label class="setting setting-toggle">
+          <input id="setting-high-contrast" type="checkbox" />
+          <span>High contrast</span>
+        </label>
+        <label class="setting">
+          <span>Effects quality</span>
+          <select id="setting-quality">
+            <option value="auto">Automatic</option>
+            <option value="high">High</option>
+            <option value="low">Light (faster on older phones)</option>
+          </select>
+        </label>
+        <button id="settings-done" class="button primary" type="button">Done</button>
+      </div>
+    </section>
+
+    <section id="screen-message" class="screen screen-result" hidden aria-labelledby="message-title">
+      <div class="panel result-panel">
         <h2 id="message-title">Level complete</h2>
+        <p id="message-stars" class="stars" hidden></p>
         <p id="message-detail" class="message-detail"></p>
-        <button id="message-primary" class="button primary" type="button">Continue</button>
-        <button id="message-secondary" class="button ghost" type="button">Menu</button>
+        <dl id="message-lines" class="result-lines" hidden></dl>
+        <p id="message-record" class="record-note" hidden></p>
+        <div class="result-actions">
+          <button id="message-primary" class="button primary" type="button">Continue</button>
+          <button id="message-replay" class="button" type="button" hidden>Replay</button>
+          <button id="message-secondary" class="button ghost" type="button">Menu</button>
+        </div>
       </div>
     </section>
 

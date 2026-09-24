@@ -28,9 +28,21 @@ export class Effects {
   readonly container = new Container();
   private readonly particles: Particle[] = [];
   private readonly shockwaves: Shockwave[] = [];
+  /** Multiplies particle counts: lowered for light effects and for reduced motion. */
+  private budget = 1;
+  private scale = 1;
+
+  setBudget(budget: number): void {
+    this.budget = budget;
+  }
+
+  setScale(scale: number): void {
+    this.scale = scale;
+  }
 
   burst(at: Point, color: number, count: number, speed: number, size: number): void {
-    for (let index = 0; index < count; index++) {
+    const scaled = Math.ceil(count * this.budget * this.scale);
+    for (let index = 0; index < scaled; index++) {
       const angle = Math.random() * Math.PI * 2;
       const velocity = speed * (0.3 + Math.random() * 0.7);
       this.spawn(at, color, Math.cos(angle) * velocity, Math.sin(angle) * velocity, size, 0.5 + Math.random() * 0.6);
@@ -38,7 +50,7 @@ export class Effects {
   }
 
   sparks(at: Point, color: number, size: number, seconds: number): void {
-    const count = Math.random() < seconds * 40 ? 1 : 0;
+    const count = Math.random() < seconds * 40 * this.budget * this.scale ? 1 : 0;
     for (let index = 0; index < count; index++) {
       const angle = Math.random() * Math.PI * 2;
       const velocity = size * (1.5 + Math.random() * 3);

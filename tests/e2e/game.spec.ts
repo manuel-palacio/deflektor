@@ -1,47 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { LEVELS } from '../../src/engine/levels';
-import type { Point } from '../../src/engine/types';
-import { solveReceiverWithMirrorsOnly } from '../support/solver';
-
-async function gameState(page: Page) {
-  return page.evaluate(() => {
-    const app = (window as any).__deflektor;
-    const game = app.currentGame;
-    return {
-      screen: app.currentScreen as string,
-      phase: game.phase as string,
-      levelIndex: game.levelIndex as number,
-      lives: game.lives as number,
-      energy: game.energy as number,
-      overload: game.overload as number,
-      podsRemaining: game.podsRemaining as number,
-    };
-  });
-}
-
-async function mirrorRotation(page: Page, tile: Point): Promise<number> {
-  return page.evaluate(({ x, y }) => (window as any).__deflektor.currentGame.board.tiles[y][x].rotation, tile);
-}
-
-async function clickTile(page: Page, tile: Point, button: 'left' | 'right' = 'left') {
-  const point = await page.evaluate((target) => (window as any).__deflektor.tileToClient(target), tile);
-  await page.mouse.click(point.x, point.y, { button });
-}
-
-async function turnMirrorTo(page: Page, tile: Point, rotation: number) {
-  const current = await mirrorRotation(page, tile);
-  const clockwise = (rotation - current + 16) % 16;
-  const button = clockwise <= 8 ? 'left' : 'right';
-  const clicks = clockwise <= 8 ? clockwise : 16 - clockwise;
-  for (let click = 0; click < clicks; click++) await clickTile(page, tile, button);
-  await expect.poll(() => mirrorRotation(page, tile)).toBe(rotation);
-}
-
-async function startLevel(page: Page, level: number) {
-  await page.click('#title-play');
-  await page.click(`.level-button[data-level="${level}"]`);
-  await expect(page.locator('#hud')).toBeVisible();
-}
+import { solveReceiverWithMirrorsOnly } from '../../src/engine/solver';
+import { clickTile, gameState, mirrorRotation, startLevel, turnMirrorTo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
@@ -170,7 +130,7 @@ test.describe('play', () => {
     // The corner mirror at rotation 0 bounces the leftward beam straight back into the laser.
     await turnMirrorTo(page, { x: 0, y: 7 }, 0);
     await expect(page.locator('#message-title')).toHaveText('Feedback overload', { timeout: 10_000 });
-    await expect(page.locator('#message-detail')).toContainText('reflected back into the laser');
+    await expect(page.locator('#message-detail')).toContainText('back into the laser');
     await page.click('#message-primary');
     const state = await gameState(page);
     expect(state.lives).toBe(2);

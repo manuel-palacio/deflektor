@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseLevel } from '../../src/engine/level';
 import { LEVELS } from '../../src/engine/levels';
-import { solveLevel } from '../support/solver';
+import { solveLevel } from '../../src/engine/solver';
 
 describe('campaign levels', () => {
   it('ships the first fifteen original levels', () => {

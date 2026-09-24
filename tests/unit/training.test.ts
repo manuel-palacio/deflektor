@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { traceBeam } from '../../src/engine/beam';
 import { parseLevel } from '../../src/engine/level';
 import { TRAINING_LEVELS } from '../../src/engine/training';
-import { solveLevel } from '../support/solver';
+import { solveLevel } from '../../src/engine/solver';
 
 describe('training levels', () => {
   it('has five lessons, each with a one-line hint', () => {

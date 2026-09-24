@@ -25,6 +25,12 @@ export interface ControlTarget {
   /** Maps an on-screen direction to the board's axes. */
   screenDirectionToBoard(step: Point): Point;
   rotate(tile: Point, steps: number): void;
+  /** The player mirror under the pointer, or undefined when the pointer leaves it. */
+  hover(tile: Point | undefined): void;
+  undo(): void;
+  redo(): void;
+  hint(): void;
+  restart(): void;
   togglePause(): void;
   toggleMute(): void;
 }
@@ -62,6 +68,8 @@ export class Controls {
     for (const type of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
       canvas.addEventListener(type, () => this.repeater.stop());
     }
+    canvas.addEventListener('pointermove', (event) => this.onPointerMove(event));
+    canvas.addEventListener('pointerleave', () => this.setHover(undefined));
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
     canvas.addEventListener('wheel', (event) => this.onWheel(event), { passive: false });
     window.addEventListener('keydown', (event) => this.onKeyDown(event));
@@ -91,6 +99,7 @@ export class Controls {
   }
 
   private onKeyDown(event: KeyboardEvent): void {
+    if (this.onShortcut(event)) return;
     if (event.code === 'Escape' || event.code === 'KeyP') {
       this.target.togglePause();
       return;
@@ -108,6 +117,38 @@ export class Controls {
       if (event.repeat) return;
       this.startKeyRotation(event.code);
     }
+  }
+
+  /** Undo/redo/hint/restart; returns true when the key was handled. */
+  private onShortcut(event: KeyboardEvent): boolean {
+    if (!this.target.isPlaying()) return false;
+    const command = event.ctrlKey || event.metaKey;
+    if (command && event.code === 'KeyZ') {
+      event.preventDefault();
+      if (event.shiftKey) this.target.redo();
+      else this.target.undo();
+      return true;
+    }
+    if (command && event.code === 'KeyY') {
+      event.preventDefault();
+      this.target.redo();
+      return true;
+    }
+    if (command || event.altKey) return false;
+    if (event.code === 'KeyH') this.target.hint();
+    else if (event.code === 'KeyR') this.target.restart();
+    else return false;
+    return true;
+  }
+
+  private onPointerMove(event: PointerEvent): void {
+    if (event.pointerType === 'touch') return;
+    this.setHover(this.playerMirrorAt(event));
+  }
+
+  private setHover(tile: Point | undefined): void {
+    this.canvas.style.cursor = tile ? 'pointer' : '';
+    this.target.hover(tile);
   }
 
   private onKeyUp(event: KeyboardEvent): void {

@@ -6,8 +6,12 @@ Built with TypeScript, PixiJS v8 (with bloom from pixi-filters) and Vite. All so
 
 ## Play
 
-- **Mouse / touch:** click or tap a mirror to rotate it clockwise. Right-click rotates it counter-clockwise, holding spins it, and the wheel also works.
-- **Keyboard:** arrows / WASD jump between mirrors, Space / X rotate, Z rotates back, P / Esc pause, M mutes.
+New players start with **Training**: five short lessons with contextual tips.
+
+- **Mouse / touch:** click or tap a mirror to rotate it clockwise. Right-click rotates it counter-clockwise, holding spins it, and the wheel also works. Hovering previews where the next turn sends the beam.
+- **Keyboard:** arrows / WASD jump between mirrors, Space / X rotate, Z rotates back. Ctrl+Z / Ctrl+Shift+Z undo and redo, H shows a hint, R restarts, P / Esc pause, M mutes.
+- **Stars:** ★ solve it, ★★ within the turn limit, ★★★ within the turn and time limits with no restarts or hints. Best score, time and stars are saved per level.
+- **Settings:** separate music and effects volume, tips, reduced motion, high contrast, and effects quality (automatically lighter on slow devices).
 
 ## Develop
 
@@ -26,7 +30,7 @@ npm run build
 - `src/render/`: Pixi views (board, beam, particles).
 - `src/input/`: pointer and keyboard controls.
 - `src/audio/`: Web Audio synth.
-- `src/app/`: screen flow, HUD, saved progress.
+- `src/app/`: screen flow, HUD, hint coach, outcomes, settings, versioned save.
 - `scripts/extract_levels.py`: turns the C64 screenshots into level maps.
 - `tests/support/solver.ts`: proves every level is solvable. Unit tests fail if a level edit breaks that.
 - `docs/specs/`: design notes and the map legend for writing levels.

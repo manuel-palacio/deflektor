@@ -1,6 +1,6 @@
-import { oppositeDirection, reflectOffMirror, traceBeam } from '../../src/engine/beam';
-import { findTiles, parseLevel } from '../../src/engine/level';
-import type { BeamEnd, Board, LevelDefinition, Point, Tile } from '../../src/engine/types';
+import { oppositeDirection, reflectOffMirror, traceBeam } from './beam';
+import { findTiles, parseLevel } from './level';
+import type { BeamEnd, Board, LevelDefinition, Point, Tile } from './types';
 
 export interface MirrorSetting {
   tile: Point;
@@ -34,16 +34,33 @@ interface SearchNode {
  * Pieces that move on their own (refractors, polarisers, rotating mirrors) count as reachable in any state.
  */
 export function solveLevel(level: LevelDefinition): SolutionStage[] {
-  const board = parseLevel(level);
+  return solveBoard(parseLevel(level), level.name);
+}
+
+/** Solves from a board in any state (some pods already gone). The board is modified; pass a copy. */
+export function solveBoard(board: Board, name: string): SolutionStage[] {
   const stages: SolutionStage[] = [];
   while (findTiles(board, 'pod').length > 0) {
-    const stage = findStage(board, (end) => end.kind === 'pod', `${level.name}: pods ${describePods(board)}`);
+    const stage = findStage(board, (end) => end.kind === 'pod', `${name}: pods ${describePods(board)}`);
     board.tiles[stage.target.y][stage.target.x] = { kind: 'empty' };
     stages.push(stage);
   }
   openGates(board);
-  stages.push(findStage(board, (end) => end.kind === 'receiver', `${level.name}: receiver`));
+  stages.push(findStage(board, (end) => end.kind === 'receiver', `${name}: receiver`));
   return stages;
+}
+
+/** The next mirror move that makes progress from the current board, or undefined if none is needed. */
+export function nextHint(board: Board): MirrorSetting | undefined {
+  const copy = structuredClone(board);
+  for (const stage of solveBoard(copy, 'hint')) {
+    const move = stage.settings.find(({ tile, rotation }) => {
+      const piece = board.tiles[tile.y][tile.x];
+      return piece.kind === 'mirror' && piece.rotation !== rotation;
+    });
+    if (move) return move;
+  }
+  return undefined;
 }
 
 /**

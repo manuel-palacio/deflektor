@@ -47,6 +47,11 @@ export type GameEvent =
 
 type Listener = (event: GameEvent) => void;
 
+interface Turn {
+  tile: Point;
+  steps: number;
+}
+
 /** One run through the levels: owns the board, meters, lives and score. Knows nothing about rendering. */
 export class Game {
   phase: GamePhase = 'playing';
@@ -69,6 +74,8 @@ export class Game {
   private readonly chargeSeconds: number;
   private readonly unlimitedLives: boolean;
   private scoreAtLevelStart = 0;
+  private readonly history: Turn[] = [];
+  private readonly undone: Turn[] = [];
   private overheatCause: 'mine' | 'feedback' = 'mine';
 
   constructor(
@@ -126,8 +133,37 @@ export class Game {
   }
 
   rotateMirror(tilePosition: Point, steps: number): void {
+    if (!this.turnMirror(tilePosition, steps)) return;
+    this.history.push({ tile: tilePosition, steps });
+    this.undone.length = 0;
+  }
+
+  get canUndo(): boolean {
+    return this.phase === 'playing' && this.history.length > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.phase === 'playing' && this.undone.length > 0;
+  }
+
+  /** Takes back the last mirror turn (it still counts as a move). */
+  undo(): void {
+    if (!this.canUndo) return;
+    const turn = this.history.pop()!;
+    this.turnMirror(turn.tile, -turn.steps);
+    this.undone.push(turn);
+  }
+
+  redo(): void {
+    if (!this.canRedo) return;
+    const turn = this.undone.pop()!;
+    this.turnMirror(turn.tile, turn.steps);
+    this.history.push(turn);
+  }
+
+  private turnMirror(tilePosition: Point, steps: number): boolean {
     const tile = tileAt(this.board, tilePosition);
-    if (this.phase !== 'playing' || tile?.kind !== 'mirror' || tile.auto) return;
+    if (this.phase !== 'playing' || tile?.kind !== 'mirror' || tile.auto) return false;
     const wasOnTarget = this.isOnTarget ? endKey(this.beam) : undefined;
     tile.rotation = wrapDirection(tile.rotation + steps);
     this.stats.rotations++;
@@ -137,6 +173,7 @@ export class Game {
     if (this.isOnTarget && 'tile' in end && endKey(this.beam) !== wasOnTarget) {
       this.emit({ type: 'beamConnected', tile: end.tile });
     }
+    return true;
   }
 
   /** Starts the current level again from scratch, without costing a life. */
@@ -168,6 +205,8 @@ export class Game {
     this.overload = 0;
     this.chargeRemaining = this.chargeSeconds;
     this.stats = { rotations: 0, seconds: 0, podsDestroyed: 0 };
+    this.history.length = 0;
+    this.undone.length = 0;
     this.scoreAtLevelStart = this.score;
     this.machinery = new Machinery(this.board, this.random);
     this.phase = 'playing';
