@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#07051a" />
+    <meta name="description" content="Deflektor — steer a laser with rotating mirrors. A neon remake of the 1987 classic." />
+    <title>Deflektor</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <header id="hud" hidden>
+      <div class="hud-level">
+        <span class="hud-label">Level</span>
+        <span id="hud-level-number" class="hud-name">01</span>
+      </div>
+      <div class="hud-meters">
+        <div class="meter meter-energy">
+          <span class="meter-label">Energy</span>
+          <div class="meter-track"><div id="hud-energy" class="meter-fill"></div></div>
+        </div>
+        <div class="meter meter-overload" id="hud-overload-meter">
+          <span class="meter-label">Overload</span>
+          <div class="meter-track"><div id="hud-overload" class="meter-fill"></div></div>
+        </div>
+      </div>
+      <div class="hud-stats">
+        <div class="stat"><span class="hud-label">Pods</span><span id="hud-pods" class="stat-value">0</span></div>
+        <div class="stat"><span class="hud-label">Score</span><span id="hud-score" class="stat-value">0</span></div>
+        <div class="stat"><span class="hud-label">Lives</span><span id="hud-lives" class="stat-value lives"></span></div>
+        <button id="hud-mute" class="icon-button" type="button" aria-label="Toggle sound">♪</button>
+        <button id="hud-pause" class="icon-button" type="button" aria-label="Pause">❚❚</button>
+      </div>
+    </header>
+    <p id="rotate-hint">Rotate your phone for a bigger board</p>
+
+    <section id="screen-title" class="screen" hidden>
+      <div class="panel title-panel">
+        <h1 class="logo" data-text="DEFLEKTOR">DEFLEKTOR</h1>
+        <p class="tagline">Bend the light. Burn the pods. Don't overload.</p>
+        <button id="title-play" class="button primary" type="button">Play</button>
+        <button id="title-help-toggle" class="button ghost" type="button">How to play</button>
+        <div id="title-help" class="help" hidden>
+          <p>Rotate the mirrors to steer the laser into every <b class="c-pod">cell</b>. When they're all gone, the barriers around the <b class="c-receiver">receiver</b> vanish: guide the beam into it to clear the level.</p>
+          <p>Purple bricks reflect the beam, blue bricks absorb it. Prisms scatter it at random, and rotating polarisers only let it through when they line up. Avoid <b class="c-mine">mines</b> and don't reflect the beam back into the laser, or the overload meter climbs. Energy drains all the time, so be quick.</p>
+          <ul>
+            <li><b>Click / tap</b> a mirror to turn it clockwise, <b>right-click</b> to turn it back, or hold to spin it. The mouse wheel works too.</li>
+            <li><b>Arrows / WASD</b> jump between mirrors. <b>Space / X</b> rotates, <b>Z</b> rotates back.</li>
+            <li><b>P / Esc</b> pause, <b>M</b> mute.</li>
+          </ul>
+        </div>
+        <p class="high-score">High score <span id="title-high-score">0</span></p>
+        <p class="credit">A tribute to Deflektor (1987) by Costa Panayi. Levels recreated from the Commodore 64 original.</p>
+      </div>
+    </section>
+
+    <section id="screen-levels" class="screen" hidden>
+      <div class="panel">
+        <h2>Select level</h2>
+        <div id="level-grid" class="level-grid"></div>
+        <button id="levels-back" class="button ghost" type="button">Back</button>
+      </div>
+    </section>
+
+    <section id="screen-pause" class="screen" hidden>
+      <div class="panel">
+        <h2>Paused</h2>
+        <button id="pause-resume" class="button primary" type="button">Resume</button>
+        <button id="pause-restart" class="button" type="button">Restart level</button>
+        <button id="pause-quit" class="button ghost" type="button">Quit to menu</button>
+      </div>
+    </section>
+
+    <section id="screen-message" class="screen" hidden>
+      <div class="panel">
+        <h2 id="message-title">Level complete</h2>
+        <p id="message-detail" class="message-detail"></p>
+        <button id="message-primary" class="button primary" type="button">Continue</button>
+        <button id="message-secondary" class="button ghost" type="button">Menu</button>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

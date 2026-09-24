@@ -1,0 +1,208 @@
+import { describe, expect, it } from 'vitest';
+import { Game, RULES, type GameEvent } from '../../src/engine/game';
+import { MACHINERY_TIMING } from '../../src/engine/machinery';
+import { level } from './helpers';
+
+// Pod at (3,0) is hit immediately; mirror at (5,0) then sends the beam down into the receiver at (5,4).
+const podThenReceiver = level(['E..o.c', '', '', '', '.....R'], { energySeconds: 10 });
+const mineLevel = level(['E..x', '', '', '', '', '', '', '', 'R'], { energySeconds: 100 });
+const secondLevel = level(['E....R'], { energySeconds: 10 });
+
+const NO_CHARGE = { chargeSeconds: 0 };
+
+function recordEvents(game: Game): GameEvent[] {
+  const events: GameEvent[] = [];
+  game.on((event) => events.push(event));
+  return events;
+}
+
+describe('Game', () => {
+  it('charges the laser before it burns: pods survive, overload and energy hold', () => {
+    const game = new Game([mineLevel, podThenReceiver], { chargeSeconds: 2 });
+    expect(game.isCharging).toBe(true);
+    game.tick(1);
+    expect(game.overload).toBe(0);
+    expect(game.energy).toBe(1);
+    expect(game.beam.end.kind).toBe('mine');
+    game.tick(1.01);
+    expect(game.isCharging).toBe(false);
+    game.tick(0.5);
+    expect(game.overload).toBeGreaterThan(0);
+  });
+
+  it('lets the player turn mirrors while the laser charges', () => {
+    const game = new Game([level(['E..0', '', '', '', '', '', '', '', 'R'])]);
+    game.rotateMirror({ x: 3, y: 0 }, -4);
+    expect(game.board.tiles[0][3]).toMatchObject({ rotation: 12 });
+  });
+
+  it('starts a run with full meters and the starting lives', () => {
+    const game = new Game([podThenReceiver], NO_CHARGE);
+    expect(game.phase).toBe('playing');
+    expect(game.lives).toBe(RULES.startingLives);
+    expect(game.energy).toBe(1);
+    expect(game.overload).toBe(0);
+  });
+
+  it('destroys a pod the beam touches and scores it', () => {
+    const game = new Game([podThenReceiver], NO_CHARGE);
+    const events = recordEvents(game);
+    game.tick(0.016);
+    expect(game.podsRemaining).toBe(0);
+    expect(game.score).toBe(RULES.podScore);
+    expect(events).toContainEqual({ type: 'podDestroyed', tile: { x: 3, y: 0 } });
+  });
+
+  it('keeps the receiver locked until every pod is gone', () => {
+    const game = new Game([level(['E..R.o', '', '', '', '', '', '', '', ''])], NO_CHARGE);
+    game.tick(0.016);
+    expect(game.receiverOpen).toBe(false);
+    expect(game.phase).toBe('playing');
+  });
+
+  it('removes the gates around the receiver once the last pod is destroyed', () => {
+    const gated = level(['E.o..R'], { walls: ['.........+', '.........+'] });
+    const game = new Game([gated], NO_CHARGE);
+    const events = recordEvents(game);
+    expect(game.board.walls[0][9]).toBe('gate');
+    game.tick(0.016);
+    expect(events).toContainEqual({ type: 'receiverOpened' });
+    expect(game.board.walls[0][9]).toBe('none');
+    game.tick(0.016);
+    expect(game.phase).toBe('levelComplete');
+  });
+
+  it('re-rolls refractor directions and rotates polarisers over time', () => {
+    const rolls = [0.1, 0.9, 0.5, 0.3];
+    let call = 0;
+    const game = new Game([level(['E.*.p', '', '', '', '', '', '', '', 'R'])], {
+      random: () => rolls[call++ % rolls.length],
+      chargeSeconds: 0,
+    });
+    const refractor = () => game.board.tiles[0][2];
+    const polarizer = () => game.board.tiles[0][4];
+    expect(refractor()).toEqual({ kind: 'refractor', direction: 1 });
+    expect(polarizer()).toMatchObject({ axis: 7 });
+    game.tick(MACHINERY_TIMING.refractorShuffleSeconds + 0.001);
+    expect(refractor()).toEqual({ kind: 'refractor', direction: 8 });
+    expect(polarizer()).toMatchObject({ axis: (7 + 1) % 8 });
+  });
+
+  it('completes the level when the beam enters the open receiver, adding the energy bonus', () => {
+    const game = new Game([podThenReceiver, secondLevel], NO_CHARGE);
+    const events = recordEvents(game);
+    game.tick(0.016);
+    game.tick(0.016);
+    expect(game.phase).toBe('levelComplete');
+    const bonus = Math.round(game.energy * RULES.energyBonus);
+    expect(events).toContainEqual({ type: 'levelComplete', bonus });
+    expect(game.score).toBe(RULES.podScore + bonus);
+  });
+
+  it('moves to the next level on continue after completing one', () => {
+    const game = new Game([podThenReceiver, secondLevel], NO_CHARGE);
+    game.tick(0.016);
+    game.tick(0.016);
+    game.continue();
+    expect(game.levelIndex).toBe(1);
+    expect(game.phase).toBe('playing');
+    expect(game.energy).toBe(1);
+  });
+
+  it('declares victory after the final level', () => {
+    const game = new Game([secondLevel], NO_CHARGE);
+    game.tick(0.016);
+    game.continue();
+    expect(game.phase).toBe('victory');
+  });
+
+  it('rotates a player mirror and retraces the beam immediately', () => {
+    const game = new Game([level(['E..0', '', '', '', '', '', '', '', 'R'])], NO_CHARGE);
+    game.rotateMirror({ x: 3, y: 0 }, -4);
+    expect(game.board.tiles[0][3]).toMatchObject({ kind: 'mirror', rotation: 12 });
+    expect(game.beam.end).toEqual({ kind: 'edge' });
+  });
+
+  it('ignores rotation requests on non-mirror tiles and auto mirrors', () => {
+    const game = new Game([level(['E.@o', '', '', '', '', '', '', '', 'R'])], NO_CHARGE);
+    game.rotateMirror({ x: 2, y: 0 }, 1);
+    game.rotateMirror({ x: 3, y: 0 }, 1);
+    expect(game.board.tiles[0][2]).toMatchObject({ rotation: 0 });
+    expect(game.board.tiles[0][3]).toEqual({ kind: 'pod' });
+  });
+
+  it('turns auto-rotating mirrors on their own', () => {
+    const game = new Game([level(['E.@', '', '', '', '', '', '', '', 'R'])], NO_CHARGE);
+    game.tick(MACHINERY_TIMING.autoMirrorStepSeconds * 3 + 0.001);
+    expect(game.board.tiles[0][2]).toMatchObject({ rotation: 3 });
+  });
+
+  it('drains energy over the level time and loses a life when it runs out', () => {
+    const game = new Game([level(['E#...R'], { energySeconds: 2 })], NO_CHARGE);
+    const events = recordEvents(game);
+    game.tick(1);
+    expect(game.energy).toBeCloseTo(0.5);
+    game.tick(1.01);
+    expect(game.phase).toBe('lifeLost');
+    expect(game.lives).toBe(RULES.startingLives - 1);
+    expect(events).toContainEqual({ type: 'lifeLost', reason: 'energy' });
+  });
+
+  it('builds overload while the beam sits on a mine and loses a life when it is full', () => {
+    const game = new Game([mineLevel], NO_CHARGE);
+    const events = recordEvents(game);
+    game.tick(0.5);
+    expect(game.overload).toBeCloseTo(0.5 * RULES.overloadRisePerSecond);
+    for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
+    expect(game.phase).toBe('lifeLost');
+    expect(events).toContainEqual({ type: 'lifeLost', reason: 'overload' });
+  });
+
+  it('builds overload when the beam is reflected back into the emitter', () => {
+    const game = new Game([level(['E..0', '', '', '', '', '', '', '', 'R'])], NO_CHARGE);
+    game.tick(0.5);
+    expect(game.overload).toBeGreaterThan(0);
+  });
+
+  it('cools overload once the beam is safe', () => {
+    const game = new Game([mineLevel], NO_CHARGE);
+    game.tick(1);
+    const heated = game.overload;
+    game.board.tiles[0][3] = { kind: 'empty' };
+    game.tick(1);
+    expect(game.overload).toBeCloseTo(heated - RULES.overloadDecayPerSecond);
+  });
+
+  it('restarts the level with a fresh board after a lost life', () => {
+    const game = new Game([mineLevel], NO_CHARGE);
+    for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
+    game.continue();
+    expect(game.phase).toBe('playing');
+    expect(game.overload).toBe(0);
+    expect(game.energy).toBe(1);
+  });
+
+  it('ends the run when the last life is lost', () => {
+    const game = new Game([mineLevel], NO_CHARGE);
+    const events = recordEvents(game);
+    for (let life = 0; life < RULES.startingLives; life++) {
+      for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
+      if (game.phase === 'lifeLost') game.continue();
+    }
+    expect(game.phase).toBe('gameOver');
+    expect(events.at(-1)).toEqual({ type: 'gameOver' });
+  });
+
+  it('freezes the simulation outside the playing phase', () => {
+    const game = new Game([secondLevel], NO_CHARGE);
+    game.tick(0.016);
+    const energy = game.energy;
+    game.tick(5);
+    expect(game.energy).toBe(energy);
+  });
+
+  it('can start a run at a later level', () => {
+    const game = new Game([podThenReceiver, secondLevel], { startLevel: 1, chargeSeconds: 0 });
+    expect(game.levelIndex).toBe(1);
+  });
+});

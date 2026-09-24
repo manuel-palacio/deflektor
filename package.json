@@ -1,0 +1,24 @@
+{
+  "name": "deflektor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A modern neon remake of Deflektor (1987) built with PixiJS, TypeScript and Vite.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.21.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  }
+}
