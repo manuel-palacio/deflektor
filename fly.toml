@@ -1,3 +1,8 @@
+# fly.toml app configuration file generated for deflektor on 2026-09-24T20:24:07Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
 app = 'deflektor'
 primary_region = 'arn'
 
