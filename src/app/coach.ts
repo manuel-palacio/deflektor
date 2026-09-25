@@ -17,7 +17,7 @@ export interface Hint {
 }
 
 export const HINT_TEXT: Record<TipId, string> = {
-  'turn-mirror': 'Click or tap a mirror to turn it. Right-click (or Z) turns it back.',
+  'turn-mirror': 'Click a mirror to turn it (right-click turns it back). On touch, tap its right half or left half.',
   mine: 'That is a mine, and the overload meter is climbing. Turn the beam away!',
   feedback: 'The beam is bouncing back into the laser. Turn it away before it overloads.',
   blocked: 'Blue bricks and polarisers can swallow the beam. Try a different angle.',

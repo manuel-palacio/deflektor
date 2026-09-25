@@ -22,6 +22,8 @@ export interface ControlTarget {
   board(): Board;
   /** The tile under a point on the canvas (the board may be drawn rotated). */
   tileAtScreen(point: Point): Point | undefined;
+  /** Where a tile's centre is on the canvas. */
+  tileCenterOnScreen(tile: Point): Point;
   /** Maps an on-screen direction to the board's axes. */
   screenDirectionToBoard(step: Point): Point;
   rotate(tile: Point, steps: number): void;
@@ -86,8 +88,15 @@ export class Controls {
     if (!tile) return;
     event.preventDefault();
     this.cursor = tile;
-    const steps = event.button === 2 ? -1 : 1;
+    const steps = event.pointerType === 'mouse' ? (event.button === 2 ? -1 : 1) : this.touchSteps(event, tile);
     this.repeater.start(() => this.target.rotate(tile, steps));
+  }
+
+  /** Touch has no right button: the right half of a mirror turns it clockwise, the left half back. */
+  private touchSteps(event: PointerEvent, tile: Point): number {
+    const bounds = this.canvas.getBoundingClientRect();
+    const center = this.target.tileCenterOnScreen(tile);
+    return event.clientX - bounds.left < center.x ? -1 : 1;
   }
 
   private onWheel(event: WheelEvent): void {

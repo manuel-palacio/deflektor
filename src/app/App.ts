@@ -2,6 +2,7 @@ import type { Sound } from '../audio/Sound';
 import { traceBeam } from '../engine/beam';
 import { beamState } from '../engine/beamState';
 import { dailySeed, generateChallenge, MODIFIER_LABEL, type ChallengeLevel } from '../engine/challenge';
+import { DIFFICULTY_LABEL } from '../engine/difficulty';
 import { FixedStepper } from '../engine/fixedStep';
 import { Game, RULES, type GameEvent, type LevelStats, type LifeLostReason } from '../engine/game';
 import { LEVELS } from '../engine/levels';
@@ -80,6 +81,7 @@ export class App {
       isPlaying: () => this.screen === 'playing' && this.game.phase === 'playing',
       board: () => this.game.board,
       tileAtScreen: (point) => this.renderer.tileAtScreen(point),
+      tileCenterOnScreen: (tile) => this.renderer.tileCenterOnScreen(tile),
       screenDirectionToBoard: (step) => this.renderer.screenDirectionToBoard(step),
       rotate: (tile, steps) => this.game.rotateMirror(tile, steps),
       hover: (tile) => this.renderer.setHover(tile, tile && this.previewTurn(tile)),
@@ -276,7 +278,11 @@ export class App {
     this.attractMode = false;
     this.mode = mode;
     this.attempt = { levelIndex: -1, restarts: 0, hintsUsed: 0 };
-    this.game = new Game(this.levels, { startLevel: levelIndex, unlimitedLives: mode === 'training' });
+    this.game = new Game(this.levels, {
+      startLevel: levelIndex,
+      unlimitedLives: mode === 'training',
+      difficulty: this.progress.settings.difficulty,
+    });
     this.game.on((event) => this.onGameEvent(event));
     this.controls.resetCursor();
     this.renderer.showGame(this.game);
@@ -407,6 +413,7 @@ export class App {
       this.progress.completeTraining();
     }
     const summary = summarizeLevel(stats, bonus, par, stars, records);
+    summary.lines.push({ label: 'Difficulty', value: DIFFICULTY_LABEL[this.progress.settings.difficulty] });
     const replayIndex = this.game.levelIndex;
     if (this.mode === 'challenge') {
       const seed = this.challenge!.seed;
@@ -567,6 +574,7 @@ export class App {
   }
 
   private applySettings(settings: Settings): void {
+    if (!this.attractMode) this.game.setDifficulty(settings.difficulty);
     this.sound.update({ muted: settings.muted, musicVolume: settings.musicVolume, effectsVolume: settings.effectsVolume });
     this.renderer.setDisplay({
       reducedMotion: settings.reducedMotion,

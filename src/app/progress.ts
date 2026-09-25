@@ -1,3 +1,5 @@
+import type { Difficulty } from '../engine/difficulty';
+
 export type Quality = 'auto' | 'high' | 'low';
 
 export interface Settings {
@@ -11,6 +13,7 @@ export interface Settings {
   /** Contextual tips while playing. */
   hints: boolean;
   quality: Quality;
+  difficulty: Difficulty;
 }
 
 /** The player's history on one level. */
@@ -61,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   highContrast: false,
   hints: true,
   quality: 'auto',
+  difficulty: 'relaxed',
 };
 
 const DEFAULT_PROGRESS: Progress = {

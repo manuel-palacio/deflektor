@@ -14,6 +14,8 @@ export interface PodMove {
 }
 
 const POLARIZER_AXES = 8;
+/** Self-rotating mirrors cycle through 8 orientations (two of the 16 mirror steps at a time). */
+const AUTO_MIRROR_STEP = 2;
 
 /** The parts of a level that move by themselves: rotating mirrors, polarisers and refractors. */
 export class Machinery {
@@ -38,7 +40,7 @@ export class Machinery {
     const polarizerSteps = this.stepsDue('polarizerClock', seconds, MACHINERY_TIMING.polarizerStepSeconds);
     const shuffleRefractors = this.stepsDue('refractorClock', seconds, MACHINERY_TIMING.refractorShuffleSeconds) > 0;
     this.forEachTile((tile) => {
-      if (tile.kind === 'mirror' && tile.auto) tile.rotation = wrapDirection(tile.rotation + mirrorSteps);
+      if (tile.kind === 'mirror' && tile.auto) tile.rotation = wrapDirection(tile.rotation + mirrorSteps * AUTO_MIRROR_STEP);
       if (tile.kind === 'polarizer') tile.axis = (tile.axis + polarizerSteps) % POLARIZER_AXES;
       if (tile.kind === 'refractor' && shuffleRefractors) tile.direction = this.randomDirection();
     });

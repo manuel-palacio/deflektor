@@ -67,7 +67,9 @@
           <p>Rotate the mirrors to steer the laser into every <b class="c-pod">cell</b>. When they're all gone, the barriers around the <b class="c-receiver">receiver</b> vanish: guide the beam into it to clear the level.</p>
           <p>Purple bricks reflect the beam, blue bricks absorb it. Prisms scatter it at random, and rotating polarisers only let it through when they line up. Avoid <b class="c-mine">mines</b> and don't reflect the beam back into the laser, or the overload meter climbs. Energy drains all the time, so be quick.</p>
           <ul>
-            <li><b>Click / tap</b> a mirror to turn it clockwise, <b>right-click</b> to turn it back, or hold to spin it. The mouse wheel works too. Hovering shows where the next turn would send the beam.</li>
+            <li><b>Click</b> a mirror to turn it clockwise, <b>right-click</b> to turn it back, or hold to spin it. The mouse wheel works too. Hovering shows where the next turn would send the beam.</li>
+            <li><b>Touch:</b> tap the <b>right half</b> of a mirror to turn it clockwise, the <b>left half</b> to turn it back; hold to spin.</li>
+            <li>Finding it hard? Pick <b>Relaxed</b> in Settings for more energy and a slower overload.</li>
             <li><b>Arrows / WASD</b> jump between mirrors. <b>Space / X</b> rotates, <b>Z</b> rotates back.</li>
             <li><b>Ctrl+Z</b> undo, <b>Ctrl+Shift+Z</b> redo, <b>H</b> hint, <b>R</b> restart, <b>P / Esc</b> pause, <b>M</b> mute.</li>
             <li>Stars: ★ solve it, ★★ within the turn limit, ★★★ within the turn and time limits without restarts or hints.</li>
@@ -99,6 +101,14 @@
     <section id="screen-settings" class="screen" hidden aria-labelledby="settings-heading">
       <div class="panel settings-panel">
         <h2 id="settings-heading">Settings</h2>
+        <label class="setting">
+          <span>Difficulty</span>
+          <select id="setting-difficulty">
+            <option value="relaxed">Relaxed: twice the energy, overload builds slowly</option>
+            <option value="normal">Normal</option>
+            <option value="classic">Classic: tuned like the original</option>
+          </select>
+        </label>
         <label class="setting">
           <span>Music volume</span>
           <input id="setting-music" type="range" min="0" max="100" step="5" />

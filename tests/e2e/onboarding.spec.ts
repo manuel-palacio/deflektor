@@ -25,7 +25,7 @@ test.describe('training', () => {
     await page.click('#title-training');
     await waitForLaser(page);
     // The lesson shows first; the tip about turning mirrors comes after the player has been idle.
-    await expect(page.locator('#coach')).toContainText('Click or tap a mirror', { timeout: 15_000 });
+    await expect(page.locator('#coach')).toContainText('Click a mirror to turn it', { timeout: 15_000 });
   });
 
   test('explains danger the moment the beam feeds back into the laser', async ({ page }) => {

@@ -57,5 +57,8 @@ export async function hoverTile(page: Page, tile: Point) {
 
 /** Waits until the laser has finished charging. */
 export async function waitForLaser(page: Page) {
-  await expect.poll(() => page.evaluate(() => (window as any).__deflektor.currentGame.isCharging), { timeout: 10_000 }).toBe(false);
+  await page.waitForFunction(() => {
+    const game = (window as any).__deflektor?.currentGame;
+    return game !== undefined && !game.isCharging;
+  }, undefined, { timeout: 10_000 });
 }

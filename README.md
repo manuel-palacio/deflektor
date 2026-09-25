@@ -8,7 +8,9 @@ Built with TypeScript, PixiJS v8 (with bloom from pixi-filters) and Vite. All so
 
 New players start with **Training**: five short lessons with contextual tips.
 
-- **Mouse / touch:** click or tap a mirror to rotate it clockwise. Right-click rotates it counter-clockwise, holding spins it, and the wheel also works. Hovering previews where the next turn sends the beam.
+- **Mouse:** click a mirror to rotate it clockwise, right-click to turn it back, hold to spin; the wheel also works. Hovering previews where the next turn sends the beam.
+- **Touch:** tap the right half of a mirror to turn it clockwise, the left half to turn it back; hold to spin.
+- **Difficulty:** Relaxed (default: twice the energy, overload builds at half speed), Normal, or Classic (tuned like the original). The level layouts and hit rules are the same on every setting.
 - **Keyboard:** arrows / WASD jump between mirrors, Space / X rotate, Z rotates back. Ctrl+Z / Ctrl+Shift+Z undo and redo, H shows a hint, R restarts, P / Esc pause, M mutes.
 - **Stars:** ★ solve it, ★★ within the turn limit, ★★★ within the turn and time limits with no restarts or hints. Best score, time and stars are saved per level.
 - **Daily challenge:** a new generated level every day (the same for everyone), with modifiers such as beam splitters, one-way mirrors, limited-turn or fragile mirrors, moving targets and a clock. Share your result as a link; `?challenge=<seed>` opens any seed.

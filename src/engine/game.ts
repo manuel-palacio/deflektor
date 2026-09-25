@@ -1,4 +1,5 @@
 import { traceBeam, wrapDirection } from './beam';
+import { DIFFICULTY_RULES, type Difficulty, type DifficultyRules } from './difficulty';
 import { findTiles, parseLevel, tileAt } from './level';
 import { Machinery } from './machinery';
 import type { BeamEnd, BeamTrace, Board, LevelDefinition, Point } from './types';
@@ -7,8 +8,6 @@ export const RULES = {
   startingLives: 3,
   podScore: 100,
   energyBonus: 1000,
-  overloadRisePerSecond: 0.6,
-  overloadDecayPerSecond: 0.25,
   /** Like the original's "CHARGING LAZER": the beam only aims for a moment before it starts to burn. */
   chargeSeconds: 2,
   /** A fragile mirror shatters after this much time reflecting the beam. */
@@ -21,6 +20,8 @@ export interface GameOptions {
   chargeSeconds?: number;
   /** Training: losing never costs a life. */
   unlimitedLives?: boolean;
+  /** Defaults to Classic, the tuning closest to the original. */
+  difficulty?: Difficulty;
 }
 
 /** Why a life was lost: running dry, a mine overloading the laser, or the beam fed back into the laser. */
@@ -81,6 +82,7 @@ export class Game {
   private readonly chargeSeconds: number;
   private readonly unlimitedLives: boolean;
   private scoreAtLevelStart = 0;
+  private rules: DifficultyRules;
   private readonly history: Turn[] = [];
   private readonly undone: Turn[] = [];
   private overheatCause: 'mine' | 'feedback' = 'mine';
@@ -93,6 +95,7 @@ export class Game {
     this.random = options.random ?? Math.random;
     this.chargeSeconds = options.chargeSeconds ?? RULES.chargeSeconds;
     this.unlimitedLives = options.unlimitedLives ?? false;
+    this.rules = DIFFICULTY_RULES[options.difficulty ?? 'classic'];
     this.loadLevel();
   }
 
@@ -123,6 +126,16 @@ export class Game {
     return this.beam.ends.some((end) => end.kind === 'mine' || end.kind === 'emitter');
   }
 
+  get difficultyRules(): DifficultyRules {
+    return this.rules;
+  }
+
+  /** Changes difficulty on the fly (from the settings screen); the current level carries on. */
+  setDifficulty(difficulty: Difficulty): void {
+    this.rules = DIFFICULTY_RULES[difficulty];
+    this.beam = this.trace();
+  }
+
   on(listener: Listener): void {
     this.listeners.push(listener);
   }
@@ -132,7 +145,7 @@ export class Game {
     for (const move of this.machinery.advance(seconds)) this.emit({ type: 'podMoved', ...move });
     if (this.isCharging) {
       this.chargeRemaining = Math.max(0, this.chargeRemaining - seconds);
-      this.beam = traceBeam(this.board);
+      this.beam = this.trace();
       return;
     }
     this.stats.seconds += seconds;
@@ -140,7 +153,7 @@ export class Game {
     if (this.phase !== 'playing') return;
     this.stressFragileMirrors(seconds);
     this.updateOverload(seconds);
-    this.energy = Math.max(0, this.energy - seconds / this.level.energySeconds);
+    this.energy = Math.max(0, this.energy - seconds / (this.level.energySeconds * this.rules.energyScale));
     this.checkForLostLife();
   }
 
@@ -181,6 +194,10 @@ export class Game {
     this.history.push(turn);
   }
 
+  private trace(): BeamTrace {
+    return traceBeam(this.board);
+  }
+
   /** Undo gives a limited mirror its turn back; redo takes it again. */
   private refundTurn(tilePosition: Point, turns: number): void {
     const tile = tileAt(this.board, tilePosition);
@@ -194,7 +211,7 @@ export class Game {
     const targetsBefore = this.targetKeys();
     tile.rotation = wrapDirection(tile.rotation + steps);
     this.stats.rotations++;
-    this.beam = traceBeam(this.board);
+    this.beam = this.trace();
     this.emit({ type: 'mirrorRotated', tile: tilePosition });
     const connected = this.beam.ends.find((end) => 'tile' in end && this.isTarget(end) && !targetsBefore.has(endKey(end)));
     if (connected && 'tile' in connected) this.emit({ type: 'beamConnected', tile: connected.tile });
@@ -243,12 +260,12 @@ export class Game {
     this.scoreAtLevelStart = this.score;
     this.machinery = new Machinery(this.board, this.random);
     this.phase = 'playing';
-    this.beam = traceBeam(this.board);
+    this.beam = this.trace();
     this.emit({ type: 'levelStarted', index: this.levelIndex });
   }
 
   private resolveBeam(): void {
-    this.beam = traceBeam(this.board);
+    this.beam = this.trace();
     const pods = this.beam.ends.filter((end) => end.kind === 'pod');
     for (const pod of pods) if ('tile' in pod) this.destroyPod(pod.tile);
     if (pods.length === 0 && this.beam.ends.some((end) => end.kind === 'receiver') && this.receiverOpen) {
@@ -268,7 +285,7 @@ export class Game {
       if (tile.stress >= RULES.fragileSeconds) {
         this.board.tiles[point.y][point.x] = { kind: 'empty' };
         this.emit({ type: 'mirrorShattered', tile: point });
-        this.beam = traceBeam(this.board);
+        this.beam = this.trace();
       }
     }
   }
@@ -281,7 +298,7 @@ export class Game {
     this.score += RULES.podScore;
     this.emit({ type: 'podDestroyed', tile });
     if (this.receiverOpen) this.openReceiver();
-    this.beam = traceBeam(this.board);
+    this.beam = this.trace();
   }
 
   /** The gates guarding the receiver vanish once the last pod is gone. */
@@ -306,8 +323,8 @@ export class Game {
       this.overheatCause = this.beam.ends.some((end) => end.kind === 'mine') ? 'mine' : 'feedback';
     }
     const change = this.isBeamOverheating
-      ? RULES.overloadRisePerSecond * seconds
-      : -RULES.overloadDecayPerSecond * seconds;
+      ? this.rules.overloadRisePerSecond * seconds
+      : -this.rules.overloadDecayPerSecond * seconds;
     this.overload = Math.min(1, Math.max(0, this.overload + change));
   }
 

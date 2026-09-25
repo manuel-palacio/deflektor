@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Game, RULES, type GameEvent } from '../../src/engine/game';
+import { DIFFICULTY_RULES } from '../../src/engine/difficulty';
 import { MACHINERY_TIMING } from '../../src/engine/machinery';
 import { level } from './helpers';
 
@@ -131,10 +132,12 @@ describe('Game', () => {
     expect(game.board.tiles[0][3]).toEqual({ kind: 'pod' });
   });
 
-  it('turns auto-rotating mirrors on their own', () => {
+  it('turns self-rotating mirrors on their own through 8 orientations', () => {
     const game = new Game([level(['E.@', '', '', '', '', '', '', '', 'R'])], NO_CHARGE);
     game.tick(MACHINERY_TIMING.autoMirrorStepSeconds * 3 + 0.001);
-    expect(game.board.tiles[0][2]).toMatchObject({ rotation: 3 });
+    expect(game.board.tiles[0][2]).toMatchObject({ rotation: 6 });
+    game.tick(MACHINERY_TIMING.autoMirrorStepSeconds * 5);
+    expect(game.board.tiles[0][2]).toMatchObject({ rotation: 0 });
   });
 
   it('drains energy over the level time and loses a life when it runs out', () => {
@@ -152,7 +155,7 @@ describe('Game', () => {
     const game = new Game([mineLevel], NO_CHARGE);
     const events = recordEvents(game);
     game.tick(0.5);
-    expect(game.overload).toBeCloseTo(0.5 * RULES.overloadRisePerSecond);
+    expect(game.overload).toBeCloseTo(0.5 * DIFFICULTY_RULES.classic.overloadRisePerSecond);
     for (let i = 0; i < 10 && game.phase === 'playing'; i++) game.tick(0.5);
     expect(game.phase).toBe('lifeLost');
     expect(events).toContainEqual({ type: 'lifeLost', reason: 'mine' });
@@ -170,7 +173,7 @@ describe('Game', () => {
     const heated = game.overload;
     game.board.tiles[0][3] = { kind: 'empty' };
     game.tick(1);
-    expect(game.overload).toBeCloseTo(heated - RULES.overloadDecayPerSecond);
+    expect(game.overload).toBeCloseTo(heated - DIFFICULTY_RULES.classic.overloadDecayPerSecond);
   });
 
   it('restarts the level with a fresh board after a lost life', () => {
@@ -337,6 +340,33 @@ describe('Game', () => {
       expect(game.stats.rotations).toBe(2);
       game.restartLevel();
       expect(game.canUndo).toBe(false);
+    });
+  });
+
+  describe('difficulty', () => {
+    it('defaults to Classic, the tuning closest to the original', () => {
+      expect(new Game([mineLevel], NO_CHARGE).difficultyRules).toEqual(DIFFICULTY_RULES.classic);
+    });
+
+    it('builds overload more slowly on Relaxed', () => {
+      const relaxed = new Game([mineLevel], { chargeSeconds: 0, difficulty: 'relaxed' });
+      const classic = new Game([mineLevel], NO_CHARGE);
+      relaxed.tick(1);
+      classic.tick(1);
+      expect(relaxed.overload).toBeCloseTo(DIFFICULTY_RULES.relaxed.overloadRisePerSecond);
+      expect(relaxed.overload).toBeLessThan(classic.overload);
+    });
+
+    it('makes energy last longer on easier settings', () => {
+      const relaxed = new Game([level(['E#...R'], { energySeconds: 10 })], { chargeSeconds: 0, difficulty: 'relaxed' });
+      relaxed.tick(5);
+      expect(relaxed.energy).toBeCloseTo(1 - 5 / (10 * DIFFICULTY_RULES.relaxed.energyScale));
+    });
+
+    it('can change difficulty in the middle of a level', () => {
+      const game = new Game([mineLevel], NO_CHARGE);
+      game.setDifficulty('relaxed');
+      expect(game.difficultyRules).toEqual(DIFFICULTY_RULES.relaxed);
     });
   });
 });
