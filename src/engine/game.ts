@@ -163,10 +163,11 @@ export class Game {
       this.emit({ type: 'mirrorLocked', tile: tilePosition });
       return;
     }
-    if (!this.turnMirror(tilePosition, steps)) return;
-    if (tile?.kind === 'mirror' && tile.turnsLeft !== undefined) tile.turnsLeft--;
-    this.history.push({ tile: tilePosition, steps });
-    this.undone.length = 0;
+    this.turnMirror(tilePosition, steps, () => {
+      if (tile?.kind === 'mirror' && tile.turnsLeft !== undefined) tile.turnsLeft--;
+      this.history.push({ tile: tilePosition, steps });
+      this.undone.length = 0;
+    });
   }
 
   get canUndo(): boolean {
@@ -181,17 +182,19 @@ export class Game {
   undo(): void {
     if (!this.canUndo) return;
     const turn = this.history.pop()!;
-    this.turnMirror(turn.tile, -turn.steps);
-    this.refundTurn(turn.tile, 1);
-    this.undone.push(turn);
+    this.turnMirror(turn.tile, -turn.steps, () => {
+      this.refundTurn(turn.tile, 1);
+      this.undone.push(turn);
+    });
   }
 
   redo(): void {
     if (!this.canRedo) return;
     const turn = this.undone.pop()!;
-    this.turnMirror(turn.tile, turn.steps);
-    this.refundTurn(turn.tile, -1);
-    this.history.push(turn);
+    this.turnMirror(turn.tile, turn.steps, () => {
+      this.refundTurn(turn.tile, -1);
+      this.history.push(turn);
+    });
   }
 
   private trace(): BeamTrace {
@@ -204,13 +207,18 @@ export class Game {
     if (tile?.kind === 'mirror' && tile.turnsLeft !== undefined) tile.turnsLeft += turns;
   }
 
-  private turnMirror(tilePosition: Point, steps: number): boolean {
+  /**
+   * Turns a mirror. `record` updates history and turn budgets before anyone hears about the turn,
+   * so listeners (undo buttons, the stuck check) always see the finished state.
+   */
+  private turnMirror(tilePosition: Point, steps: number, record: () => void): boolean {
     const tile = tileAt(this.board, tilePosition);
     const turnable = tile?.kind === 'oneWay' || (tile?.kind === 'mirror' && !tile.auto);
     if (this.phase !== 'playing' || !turnable) return false;
     const targetsBefore = this.targetKeys();
     tile.rotation = wrapDirection(tile.rotation + steps);
     this.stats.rotations++;
+    record();
     this.beam = this.trace();
     this.emit({ type: 'mirrorRotated', tile: tilePosition });
     const connected = this.beam.ends.find((end) => 'tile' in end && this.isTarget(end) && !targetsBefore.has(endKey(end)));

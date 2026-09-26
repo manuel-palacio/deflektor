@@ -168,9 +168,18 @@ function playerMirrorSettings(board: Board, choices: Choice[]): MirrorSetting[] 
   });
 }
 
+/** The states a piece can be put in; a mirror with limited turns can only reach nearby rotations. */
 function optionsFor(piece: Tile): number[] {
   const count = piece.kind === 'polarizer' ? 8 : 16;
-  return Array.from({ length: count }, (_, index) => index);
+  const all = Array.from({ length: count }, (_, index) => index);
+  if (piece.kind !== 'mirror' || piece.turnsLeft === undefined) return all;
+  const turnsLeft = piece.turnsLeft;
+  return all.filter((rotation) => turnsBetween(piece.rotation, rotation) <= turnsLeft);
+}
+
+function turnsBetween(from: number, to: number): number {
+  const clockwise = (((to - from) % 16) + 16) % 16;
+  return Math.min(clockwise, 16 - clockwise);
 }
 
 function apply(piece: Tile, option: number): void {

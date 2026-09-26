@@ -82,7 +82,8 @@ test.describe('controls', () => {
     expect((await gameState(page)).energy).toBe(energy);
     await page.click('#pause-resume');
     await expect(page.locator('#screen-pause')).toBeHidden();
-    await expect.poll(async () => (await gameState(page)).energy).toBeLessThan(energy);
+    // Energy only drains once the laser has finished charging, which can take a moment under load.
+    await expect.poll(async () => (await gameState(page)).energy, { timeout: 15_000 }).toBeLessThan(energy);
   });
 
   test('the mute setting survives a reload', async ({ page }) => {

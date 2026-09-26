@@ -8,6 +8,7 @@ import { Game, RULES, type GameEvent, type LevelStats, type LifeLostReason } fro
 import { LEVELS } from '../engine/levels';
 import { clickDistance, computePar, rateStars, type Par } from '../engine/scoring';
 import { nextHint } from '../engine/solver';
+import { canStillFinish } from '../engine/stuck';
 import { TRAINING_LEVELS } from '../engine/training';
 import { validateLevel } from '../engine/validation';
 import type { BeamTrace, LevelDefinition, Point } from '../engine/types';
@@ -71,6 +72,8 @@ export class App {
   /** Per-attempt counters behind the star rating (reset when a new level starts). */
   private attempt = { levelIndex: -1, restarts: 0, hintsUsed: 0 };
   private toast?: { text: string; remaining: number };
+  /** Set once the player has been told the level can no longer be finished (until they act on it). */
+  private stuckShown = false;
 
   constructor(
     private readonly renderer: Renderer,
@@ -327,6 +330,7 @@ export class App {
         break;
       case 'mirrorRotated':
         this.sound.mirrorTick();
+        if (this.isLimitedMirror(event.tile)) this.checkStillFinishable('turns');
         break;
       case 'beamConnected':
         this.sound.connect();
@@ -334,10 +338,12 @@ export class App {
       case 'mirrorLocked':
         this.sound.locked();
         this.showToast('That mirror has no turns left. Undo a turn to get one back.');
+        this.checkStillFinishable('turns');
         break;
       case 'mirrorShattered':
         this.sound.shatter();
         this.announce('A fragile mirror shattered.');
+        this.checkStillFinishable('shattered');
         break;
       case 'receiverOpened':
         this.sound.gateOpen();
@@ -363,6 +369,7 @@ export class App {
   }
 
   private onLevelStarted(): void {
+    this.stuckShown = false;
     this.sound.chargeUp();
     this.stepper.reset();
     this.renderer.setHint(undefined);
@@ -444,6 +451,39 @@ export class App {
     });
   }
 
+  private isLimitedMirror(tile: Point): boolean {
+    const piece = this.game.board.tiles[tile.y][tile.x];
+    return piece.kind === 'mirror' && piece.turnsLeft !== undefined;
+  }
+
+  /** After a shatter or a spent turn, makes sure the player is never left with a level that cannot be won. */
+  private checkStillFinishable(cause: 'turns' | 'shattered'): void {
+    if (this.stuckShown || this.game.phase !== 'playing' || canStillFinish(this.game.board)) return;
+    this.showStuck(cause);
+  }
+
+  private showStuck(cause: 'turns' | 'shattered' | 'unknown'): void {
+    this.stuckShown = true;
+    const why = {
+      turns: 'The limited mirrors do not have enough turns left to reach every target.',
+      shattered: 'A fragile mirror that the route needed has shattered.',
+      unknown: 'There is no longer a way to reach every target from here.',
+    }[cause];
+    const canUndo = cause === 'turns' && this.game.canUndo;
+    this.showResult({
+      title: 'This can no longer be finished',
+      detail: `${why} Restarting is free: it does not cost a life.`,
+      primary: ['Restart level', () => this.restartLevel()],
+      secondary: canUndo
+        ? ['Undo last turn', () => {
+            this.game.undo();
+            this.stuckShown = false;
+            this.showScreen('playing');
+          }]
+        : ['Menu', () => this.showTitle()],
+    });
+  }
+
   private showLifeLost(reason: LifeLostReason): void {
     const failure = explainFailure(reason);
     const lives = this.mode === 'training' ? '' : ` ${this.game.lives} ${this.game.lives === 1 ? 'life' : 'lives'} left.`;
@@ -485,6 +525,7 @@ export class App {
 
   private restartLevel(): void {
     if (this.game.phase !== 'playing' && this.game.phase !== 'lifeLost') return;
+    this.stuckShown = false;
     this.clearResultTimer();
     this.attempt.restarts++;
     this.game.restartLevel();
@@ -507,8 +548,14 @@ export class App {
 
   private showHint(): void {
     if (this.game.phase !== 'playing') return;
-    const move = nextHint(this.game.board);
     this.attempt.hintsUsed++;
+    let move;
+    try {
+      move = nextHint(this.game.board);
+    } catch {
+      this.showStuck('unknown');
+      return;
+    }
     if (!move) {
       this.showToast('No turn needed right now: wait for the moving parts to line up.');
       return;

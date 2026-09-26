@@ -369,4 +369,20 @@ describe('Game', () => {
       expect(game.difficultyRules).toEqual(DIFFICULTY_RULES.relaxed);
     });
   });
+
+  it('records a turn (history, turn budget) before announcing it', () => {
+    const limited = { ...level(['E', '', '', '', '', '', '', '', 'R']), pieces: [{ x: 5, y: 3, type: 'mirror' as const, rotation: 2, turns: 2 }] };
+    const game = new Game([limited], NO_CHARGE);
+    const seen: { canUndo: boolean; turnsLeft?: number }[] = [];
+    game.on((event) => {
+      const tile = game.board.tiles[3][5];
+      if (event.type === 'mirrorRotated' && tile.kind === 'mirror') seen.push({ canUndo: game.canUndo, turnsLeft: tile.turnsLeft });
+    });
+    game.rotateMirror({ x: 5, y: 3 }, 1);
+    game.undo();
+    expect(seen).toEqual([
+      { canUndo: true, turnsLeft: 1 },
+      { canUndo: false, turnsLeft: 2 },
+    ]);
+  });
 });
