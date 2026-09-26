@@ -45,9 +45,18 @@ describe('placeBoard', () => {
     expect(659 - (110 + layout.originX + layout.boardWidth)).toBeGreaterThanOrEqual(56);
   });
 
+  it('still turns the board above the touch bar, even when tip room makes both ways tie (iPhone 15: 393 x 579 under a 131 px HUD)', () => {
+    expect(placeBoard(393, 579, 131).rotated).toBe(true);
+  });
+
   it('does not squeeze a landscape phone board for tips (they go beside it instead)', () => {
     const { layout } = placeBoard(780, 360, 45);
     expect(layout.tileSize).toBe(new BoardLayout(780, 360, 45).tileSize);
+  });
+
+  it('puts a landscape phone board on the left so the spare width is one strip wide enough for tips', () => {
+    const { layout } = placeBoard(696, 360, 45);
+    expect(696 - (layout.originX + layout.boardWidth)).toBeGreaterThanOrEqual(150);
   });
 
   it('keeps the board upright on landscape screens', () => {

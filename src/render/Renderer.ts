@@ -68,9 +68,17 @@ export class Renderer {
   private constructor(
     private readonly app: Application,
     private readonly reservedTop: () => number,
+    private readonly reservedBottom: () => number,
+    private readonly reservedRight: () => number,
   ) {}
 
-  static async create(host: HTMLElement, reservedTop: () => number): Promise<Renderer> {
+  /** `reservedTop` / `reservedBottom` report the HUD and touch-bar heights the board must stay clear of. */
+  static async create(
+    host: HTMLElement,
+    reservedTop: () => number,
+    reservedBottom: () => number,
+    reservedRight: () => number,
+  ): Promise<Renderer> {
     const app = new Application();
     await app.init({
       resizeTo: host,
@@ -80,7 +88,7 @@ export class Renderer {
       autoDensity: true,
     });
     host.appendChild(app.canvas);
-    const renderer = new Renderer(app, reservedTop);
+    const renderer = new Renderer(app, reservedTop, reservedBottom, reservedRight);
     renderer.assembleStage();
     return renderer;
   }
@@ -132,7 +140,11 @@ export class Renderer {
 
   /** Recomputes the layout for the current canvas size and HUD height. */
   relayout(): void {
-    const placement = placeBoard(this.app.screen.width, this.app.screen.height, this.reservedTop());
+    const placement = placeBoard(
+      this.app.screen.width - this.reservedRight(),
+      this.app.screen.height - this.reservedBottom(),
+      this.reservedTop(),
+    );
     this.layout = placement.layout;
     this.rotated = placement.rotated;
     this.frame.rotation = placement.rotated ? Math.PI / 2 : 0;

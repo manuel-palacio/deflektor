@@ -151,7 +151,10 @@ test.describe('portrait phone', () => {
     const point = await page.evaluate((tile) => (window as any).__deflektor.tileToClient(tile), corner);
     // Rotated a quarter turn, the bottom-left corner of the board sits at the top-left of the screen.
     expect(point.y).toBeLessThan(300);
+    // The first tap only selects the mirror; taps on a selected mirror turn it.
     await page.touchscreen.tap(point.x, point.y);
+    await expect.poll(() => mirrorRotation(page, corner)).toBe(before);
+    await page.touchscreen.tap(point.x + 8, point.y);
     await expect.poll(() => mirrorRotation(page, corner)).toBe((before + 1) % 16);
   });
 });

@@ -13,7 +13,8 @@ import { TRAINING_LEVELS } from '../engine/training';
 import { validateLevel } from '../engine/validation';
 import type { BeamTrace, LevelDefinition, Point } from '../engine/types';
 import { playerMirrors } from '../input/cursor';
-import { Controls } from '../input/Controls';
+import { Controls, type ControlTarget } from '../input/Controls';
+import { TouchControls } from '../input/TouchControls';
 import type { Renderer } from '../render/Renderer';
 import { Coach } from './coach';
 import { byId, onClick } from './dom';
@@ -38,6 +39,8 @@ const ATTRACT_MOVE_SECONDS = 0.8;
 const RESULT_DELAY_MS = { levelComplete: 1300, lifeLost: 1200, gameOver: 1400 };
 const TOAST_SECONDS = 5;
 const MIN_TIP_HEIGHT = 56;
+/** Phones and tablets get the on-screen mirror controls. */
+const IS_TOUCH_DEVICE = window.matchMedia('(pointer: coarse)').matches;
 const MIN_TIP_SIDE_WIDTH = 150;
 
 interface ResultOptions {
@@ -82,7 +85,7 @@ export class App {
   ) {
     this.game = this.createAttractGame();
     renderer.showGame(this.game);
-    this.controls = new Controls(renderer.canvas, {
+    const controlTarget: ControlTarget = {
       isPlaying: () => this.screen === 'playing' && this.game.phase === 'playing',
       board: () => this.game.board,
       tileAtScreen: (point) => this.renderer.tileAtScreen(point),
@@ -96,7 +99,9 @@ export class App {
       restart: () => this.restartLevel(),
       togglePause: () => this.togglePause(),
       toggleMute: () => this.toggleMute(),
-    });
+    };
+    this.controls = new Controls(renderer.canvas, controlTarget);
+    new TouchControls(renderer.canvas, controlTarget, this.controls);
     this.settingsPanel = new SettingsPanel((changes) => this.changeSettings(changes));
     this.applySettings(progress.settings);
     this.bindButtons();
@@ -104,6 +109,7 @@ export class App {
       if (document.hidden && this.screen === 'playing') this.pause();
     });
     document.addEventListener('keydown', (event) => this.onMenuKey(event));
+    window.addEventListener('resize', () => this.updateHudHeight());
   }
 
   /** Opens the title screen, or straight into a challenge when the link carries one. */
@@ -168,6 +174,11 @@ export class App {
     return this.renderer.inspect();
   }
 
+  /** The mirror currently selected by touch or keyboard. */
+  inspectControls(): Point | undefined {
+    return this.controls.cursor;
+  }
+
   tileToClient(tile: Point): Point {
     const bounds = this.renderer.canvas.getBoundingClientRect();
     const center = this.renderer.tileCenterOnScreen(tile);
@@ -221,8 +232,16 @@ export class App {
     this.screen = screen;
     for (const [name, id] of Object.entries(SCREEN_IDS)) byId(id).hidden = name !== screen;
     this.hud.setVisible(!this.attractMode);
+    byId('touch-controls').hidden = !(IS_TOUCH_DEVICE && screen === 'playing');
+    this.updateHudHeight();
     if (screen !== 'playing') this.renderer.setHover(undefined, undefined);
     this.renderer.relayout();
+  }
+
+  /** The landscape touch column starts below the HUD, whose height changes with the screen. */
+  private updateHudHeight(): void {
+    const hud = byId('hud');
+    document.documentElement.style.setProperty('--hud-height', `${hud.hidden ? 0 : hud.getBoundingClientRect().height}px`);
   }
 
   private showSettings(): void {
@@ -604,10 +623,17 @@ export class App {
   private placeTip(tip: HTMLElement): void {
     const board = this.renderer.boardScreenRect();
     const canvas = this.renderer.canvas.getBoundingClientRect();
-    const below = canvas.height - board.bottom;
-    const side = board.left;
+    const bar = byId('touch-controls');
+    const barBox = bar.getBoundingClientRect();
+    const barIsColumn = barBox.height > barBox.width;
+    const barHeight = bar.hidden || barIsColumn ? 0 : barBox.height;
+    const barWidth = !bar.hidden && barIsColumn ? barBox.width : 0;
+    const below = canvas.height - barHeight - board.bottom;
+    const side = canvas.width - barWidth - board.right;
     tip.classList.remove('coach-below', 'coach-side', 'coach-overlay');
     tip.style.removeProperty('--coach-width');
+    tip.style.setProperty('--coach-bottom', `${barHeight + 12}px`);
+    tip.style.setProperty('--coach-right', `${barWidth + 8}px`);
     if (below >= MIN_TIP_HEIGHT) {
       tip.classList.add('coach-below');
     } else if (side >= MIN_TIP_SIDE_WIDTH) {

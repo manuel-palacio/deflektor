@@ -51,6 +51,12 @@
       </div>
     </header>
 
+    <nav id="touch-controls" class="touch-controls" aria-label="Mirror controls" hidden>
+      <button id="touch-prev" class="touch-button" type="button" aria-label="Select previous mirror">‹</button>
+      <button id="touch-ccw" class="touch-button touch-turn" type="button" aria-label="Turn selected mirror counter-clockwise">↺</button>
+      <button id="touch-cw" class="touch-button touch-turn" type="button" aria-label="Turn selected mirror clockwise">↻</button>
+      <button id="touch-next" class="touch-button" type="button" aria-label="Select next mirror">›</button>
+    </nav>
     <div id="coach" class="coach" role="status" aria-live="polite" hidden></div>
     <div id="announcer" class="visually-hidden" role="status" aria-live="polite"></div>
 
@@ -68,7 +74,7 @@
           <p>Purple bricks reflect the beam, blue bricks absorb it. Prisms scatter it at random, and rotating polarisers only let it through when they line up. Avoid <b class="c-mine">mines</b> and don't reflect the beam back into the laser, or the overload meter climbs. Energy drains all the time, so be quick.</p>
           <ul>
             <li><b>Click</b> a mirror to turn it clockwise, <b>right-click</b> to turn it back, or hold to spin it. The mouse wheel works too. Hovering shows where the next turn would send the beam.</li>
-            <li><b>Touch:</b> tap the <b>right half</b> of a mirror to turn it clockwise, the <b>left half</b> to turn it back; hold to spin.</li>
+            <li><b>Touch:</b> tap near a mirror to select it, then turn it with the big <b>↺ ↻</b> buttons (hold to keep turning), drag around it like a dial, or tap its right / left half. <b>‹ ›</b> pick the next mirror.</li>
             <li>Finding it hard? Pick <b>Relaxed</b> in Settings for more energy and a slower overload.</li>
             <li><b>Arrows / WASD</b> jump between mirrors. <b>Space / X</b> rotates, <b>Z</b> rotates back.</li>
             <li><b>Ctrl+Z</b> undo, <b>Ctrl+Shift+Z</b> redo, <b>H</b> hint, <b>R</b> restart, <b>P / Esc</b> pause, <b>M</b> mute.</li>

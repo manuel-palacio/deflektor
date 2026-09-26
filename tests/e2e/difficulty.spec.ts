@@ -32,6 +32,8 @@ test.describe('touch', () => {
     const corner = { x: 0, y: 7 };
     const center = await page.evaluate((tile) => (window as any).__deflektor.tileToClient(tile), corner);
     const before = await mirrorRotation(page, corner);
+    // The first tap only selects the mirror; taps on a selected mirror turn it.
+    await page.touchscreen.tap(center.x, center.y);
     await page.touchscreen.tap(center.x + 8, center.y);
     await expect.poll(() => mirrorRotation(page, corner)).toBe((before + 1) % 16);
     await page.touchscreen.tap(center.x - 8, center.y);

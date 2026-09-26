@@ -16,6 +16,7 @@ test('tapping the right or left half of a mirror turns it either way', async ({ 
   await page.tap('#title-training');
   const mirror = { x: 7, y: 4 };
   const center = await page.evaluate((tile) => (window as any).__deflektor.tileToClient(tile), mirror);
+  await page.touchscreen.tap(center.x, center.y);
   await page.touchscreen.tap(center.x + 8, center.y);
   await expect.poll(() => mirrorRotation(page, mirror)).toBe(9);
   await page.touchscreen.tap(center.x - 8, center.y);
@@ -27,6 +28,7 @@ test('a lesson can be finished with taps alone', async ({ page }) => {
   await page.tap('#title-training');
   const mirror = { x: 7, y: 4 };
   const center = await page.evaluate((tile) => (window as any).__deflektor.tileToClient(tile), mirror);
+  await page.touchscreen.tap(center.x, center.y);
   for (let tap = 0; tap < 4; tap++) await page.touchscreen.tap(center.x - 8, center.y);
   await waitForLaser(page);
   await expect.poll(() => page.evaluate(() => (window as any).__deflektor.currentGame.podsRemaining)).toBe(0);

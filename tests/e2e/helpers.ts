@@ -62,3 +62,34 @@ export async function waitForLaser(page: Page) {
     return game !== undefined && !game.isCharging;
   }, undefined, { timeout: 20_000 });
 }
+
+/** Sends a raw touch pointer event to the game canvas (for press-and-hold and drags). */
+export async function touchPointer(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup', point: Point, target: 'canvas' | 'window' = 'canvas') {
+  await page.evaluate(
+    ({ type, point, target }) => {
+      const canvas = document.querySelector('#stage canvas') as HTMLCanvasElement;
+      const bounds = canvas.getBoundingClientRect();
+      const event = new PointerEvent(type, {
+        pointerId: 7,
+        pointerType: 'touch',
+        isPrimary: true,
+        bubbles: true,
+        cancelable: true,
+        clientX: bounds.left + point.x,
+        clientY: bounds.top + point.y,
+      });
+      (target === 'canvas' ? canvas : document.body).dispatchEvent(event);
+    },
+    { type, point, target },
+  );
+}
+
+/** A tile's centre relative to the canvas (not the page). */
+export async function tileOnCanvas(page: Page, tile: Point): Promise<Point> {
+  return page.evaluate((target) => {
+    const app = (window as any).__deflektor;
+    const client = app.tileToClient(target);
+    const bounds = (document.querySelector('#stage canvas') as HTMLCanvasElement).getBoundingClientRect();
+    return { x: client.x - bounds.left, y: client.y - bounds.top };
+  }, tile);
+}

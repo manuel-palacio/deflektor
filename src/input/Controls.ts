@@ -56,7 +56,7 @@ class HoldRepeater {
   }
 }
 
-/** Mouse/touch on mirrors plus an original-style keyboard cursor that hops between mirrors. */
+/** Mouse on mirrors plus an original-style keyboard cursor that hops between mirrors. */
 export class Controls {
   cursor?: Point;
   private readonly repeater = new HoldRepeater();
@@ -73,6 +73,9 @@ export class Controls {
     canvas.addEventListener('pointermove', (event) => this.onPointerMove(event));
     canvas.addEventListener('pointerleave', () => this.setHover(undefined));
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+    // A release anywhere (or losing focus) ends a held turn, even if the canvas never hears about it.
+    for (const type of ['pointerup', 'pointercancel'] as const) window.addEventListener(type, () => this.repeater.stop());
+    window.addEventListener('blur', () => this.repeater.stop());
     canvas.addEventListener('wheel', (event) => this.onWheel(event), { passive: false });
     window.addEventListener('keydown', (event) => this.onKeyDown(event));
     window.addEventListener('keyup', (event) => this.onKeyUp(event));
@@ -83,20 +86,15 @@ export class Controls {
     this.repeater.stop();
   }
 
+  /** Mouse only: touch and pen are handled by TouchControls. */
   private onPointerDown(event: PointerEvent): void {
+    if (event.pointerType !== 'mouse') return;
     const tile = this.playerMirrorAt(event);
     if (!tile) return;
     event.preventDefault();
     this.cursor = tile;
-    const steps = event.pointerType === 'mouse' ? (event.button === 2 ? -1 : 1) : this.touchSteps(event, tile);
+    const steps = event.button === 2 ? -1 : 1;
     this.repeater.start(() => this.target.rotate(tile, steps));
-  }
-
-  /** Touch has no right button: the right half of a mirror turns it clockwise, the left half back. */
-  private touchSteps(event: PointerEvent, tile: Point): number {
-    const bounds = this.canvas.getBoundingClientRect();
-    const center = this.target.tileCenterOnScreen(tile);
-    return event.clientX - bounds.left < center.x ? -1 : 1;
   }
 
   private onWheel(event: WheelEvent): void {
