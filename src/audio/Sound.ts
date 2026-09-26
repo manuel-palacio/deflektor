@@ -71,6 +71,19 @@ export class Sound {
     this.startPad();
   }
 
+  /** Silences music and effects while the game is out of sight; browsers otherwise keep playing it. */
+  suspend(): void {
+    void this.context?.suspend();
+  }
+
+  resume(): void {
+    void this.context?.resume();
+  }
+
+  get state(): AudioContextState | 'not started' {
+    return this.context?.state ?? 'not started';
+  }
+
   update(settings: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...settings };
     this.applySettings();

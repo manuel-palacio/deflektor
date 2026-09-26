@@ -73,3 +73,23 @@ test.describe('audio and effects settings', () => {
     await expect(page.locator('#message-detail')).toBeVisible();
   });
 });
+
+test.describe('background', () => {
+  async function setPageHidden(page: import('@playwright/test').Page, hidden: boolean) {
+    await page.evaluate((isHidden) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => isHidden });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (isHidden ? 'hidden' : 'visible') });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+  }
+
+  test('music stops while the game is in the background and comes back with it', async ({ page }) => {
+    await page.click('#title-training');
+    const audioState = () => page.evaluate(() => (window as any).__deflektor.audioState);
+    await expect.poll(audioState).toBe('running');
+    await setPageHidden(page, true);
+    await expect.poll(audioState).toBe('suspended');
+    await setPageHidden(page, false);
+    await expect.poll(audioState).toBe('running');
+  });
+});

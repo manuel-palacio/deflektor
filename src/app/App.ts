@@ -106,7 +106,12 @@ export class App {
     this.applySettings(progress.settings);
     this.bindButtons();
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && this.screen === 'playing') this.pause();
+      if (!document.hidden) {
+        this.sound.resume();
+        return;
+      }
+      this.sound.suspend();
+      if (this.screen === 'playing') this.pause();
     });
     document.addEventListener('keydown', (event) => this.onMenuKey(event));
     window.addEventListener('resize', () => this.updateHudHeight());
@@ -168,6 +173,10 @@ export class App {
 
   get soundLog(): readonly string[] {
     return this.sound.played;
+  }
+
+  get audioState(): string {
+    return this.sound.state;
   }
 
   inspectRenderer() {
