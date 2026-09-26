@@ -248,6 +248,28 @@ select {
   animation: fade-in 0.3s ease-out;
 }
 
+.coach-below {
+  font-size: 15px;
+  padding: 8px 14px;
+}
+
+/* Landscape phones: the tip sits in the empty margin beside the board. */
+.coach-side {
+  left: 8px;
+  transform: none;
+  width: var(--coach-width, 180px);
+  font-size: 14px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+/* Last resort: a see-through overlay, so the board stays readable underneath. */
+.coach-overlay {
+  background: rgba(14, 10, 40, 0.6);
+  font-size: 14px;
+  padding: 6px 12px;
+}
+
 /* ---------- Screens ---------- */
 
 .screen {

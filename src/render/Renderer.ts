@@ -26,6 +26,7 @@ export interface RenderInspection {
   previewShown: boolean;
   effects: EffectsLevel;
   rotated: boolean;
+  board: { left: number; top: number; right: number; bottom: number };
 }
 
 const DUST_COUNT = 50;
@@ -125,6 +126,7 @@ export class Renderer {
       previewShown: this.preview !== undefined,
       effects: this.effectsLevel,
       rotated: this.rotated,
+      board: this.boardScreenRect(),
     };
   }
 
@@ -148,6 +150,20 @@ export class Renderer {
   tileCenterOnScreen(tile: Point): Point {
     const { x, y } = this.frame.toGlobal(this.layout.tileCenter(tile));
     return { x, y };
+  }
+
+  /** The board's rectangle on the canvas (after any rotation), in CSS pixels. */
+  boardScreenRect(): { left: number; top: number; right: number; bottom: number } {
+    const corners = [
+      { x: this.layout.originX, y: this.layout.originY },
+      { x: this.layout.originX + this.layout.boardWidth, y: this.layout.originY + this.layout.boardHeight },
+    ].map((corner) => this.frame.toGlobal(corner));
+    return {
+      left: Math.min(corners[0].x, corners[1].x),
+      right: Math.max(corners[0].x, corners[1].x),
+      top: Math.min(corners[0].y, corners[1].y),
+      bottom: Math.max(corners[0].y, corners[1].y),
+    };
   }
 
   /** Converts a direction pressed on screen (e.g. an arrow key) into the board's own axes. */

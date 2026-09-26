@@ -6,13 +6,19 @@ export class BoardLayout {
   readonly originX: number;
   readonly originY: number;
 
-  constructor(width: number, height: number, reservedTop: number) {
+  /**
+   * `startAxis` says which axis hugs its start instead of centring: spare room then collects at the
+   * far end (below the board on screen), where tips can be shown without covering it.
+   */
+  constructor(width: number, height: number, reservedTop: number, startAxis: 'x' | 'y' = 'y', reservedBottom = 0) {
     const padding = Math.max(8, Math.min(width, height) * 0.03);
     const availableWidth = width - padding * 2;
-    const availableHeight = height - reservedTop - padding * 2;
+    const availableHeight = height - reservedTop - reservedBottom - padding * 2;
     this.tileSize = Math.floor(Math.min(availableWidth / BOARD_COLS, availableHeight / BOARD_ROWS));
-    this.originX = Math.round((width - this.tileSize * BOARD_COLS) / 2);
-    this.originY = Math.round(reservedTop + (height - reservedTop - this.tileSize * BOARD_ROWS) / 2);
+    const spareX = width - this.tileSize * BOARD_COLS;
+    const spareY = height - reservedTop - this.tileSize * BOARD_ROWS;
+    this.originX = Math.round(startAxis === 'x' ? Math.min(spareX / 2, padding) : spareX / 2);
+    this.originY = Math.round(reservedTop + (startAxis === 'y' ? Math.min(spareY / 2, padding) : spareY / 2));
   }
 
   get boardWidth(): number {
@@ -59,10 +65,28 @@ export interface BoardPlacement {
  * whichever orientation gives bigger tiles wins.
  */
 export function placeBoard(width: number, height: number, reservedTop: number): BoardPlacement {
-  const upright = new BoardLayout(width, height, reservedTop);
-  const turned = new BoardLayout(height - reservedTop, width, 0);
+  const upright = uprightLayout(width, height, reservedTop);
+  // Turned a quarter, board-space x runs down the screen, so that is the axis that hugs the top.
+  const turned = turnedLayout(width, height, reservedTop);
   if (turned.tileSize > upright.tileSize) {
     return { layout: turned, rotated: true, offset: { x: width, y: reservedTop } };
   }
   return { layout: upright, rotated: false, offset: { x: 0, y: 0 } };
+}
+
+/** Room kept free under the board for tips, when it costs the board little. */
+const TIP_ROOM = 64;
+const MAX_SHRINK_FOR_TIPS = 0.85;
+
+function uprightLayout(width: number, height: number, reservedTop: number): BoardLayout {
+  const full = new BoardLayout(width, height, reservedTop);
+  const withRoom = new BoardLayout(width, height, reservedTop, 'y', TIP_ROOM);
+  return withRoom.tileSize >= full.tileSize * MAX_SHRINK_FOR_TIPS ? withRoom : full;
+}
+
+/** The same trade-off for a board turned a quarter, whose board-space x axis runs down the screen. */
+function turnedLayout(width: number, height: number, reservedTop: number): BoardLayout {
+  const full = new BoardLayout(height - reservedTop, width, 0, 'x');
+  const withRoom = new BoardLayout(height - reservedTop - TIP_ROOM, width, 0, 'x');
+  return withRoom.tileSize >= full.tileSize * MAX_SHRINK_FOR_TIPS ? withRoom : full;
 }

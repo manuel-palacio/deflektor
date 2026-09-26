@@ -36,6 +36,8 @@ const MAX_FRAME_SECONDS = 0.05;
 const ATTRACT_MOVE_SECONDS = 0.8;
 const RESULT_DELAY_MS = { levelComplete: 1300, lifeLost: 1200, gameOver: 1400 };
 const TOAST_SECONDS = 5;
+const MIN_TIP_HEIGHT = 56;
+const MIN_TIP_SIDE_WIDTH = 150;
 
 interface ResultOptions {
   title: string;
@@ -544,6 +546,28 @@ export class App {
     if (coachEl.hidden === visible || coachEl.textContent !== (text ?? '')) {
       coachEl.hidden = !visible;
       coachEl.textContent = text ?? '';
+      if (visible) this.placeTip(coachEl);
+    }
+  }
+
+  /**
+   * Keeps tips off the board: below it when there is room (portrait phones, desktops), beside it
+   * when the sides are free (landscape phones), and only as a see-through overlay as a last resort.
+   */
+  private placeTip(tip: HTMLElement): void {
+    const board = this.renderer.boardScreenRect();
+    const canvas = this.renderer.canvas.getBoundingClientRect();
+    const below = canvas.height - board.bottom;
+    const side = board.left;
+    tip.classList.remove('coach-below', 'coach-side', 'coach-overlay');
+    tip.style.removeProperty('--coach-width');
+    if (below >= MIN_TIP_HEIGHT) {
+      tip.classList.add('coach-below');
+    } else if (side >= MIN_TIP_SIDE_WIDTH) {
+      tip.classList.add('coach-side');
+      tip.style.setProperty('--coach-width', `${Math.floor(side - 16)}px`);
+    } else {
+      tip.classList.add('coach-overlay');
     }
   }
 

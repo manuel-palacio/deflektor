@@ -21,3 +21,11 @@ describe('training levels', () => {
     });
   });
 });
+
+describe('every lesson gives the player something to do', () => {
+  it.each(TRAINING_LEVELS.map((level) => [level.name, level] as const))('%s has a mirror to turn', (_, level) => {
+    const board = parseLevel(level);
+    const turnable = board.tiles.flat().filter((tile) => tile.kind === 'oneWay' || (tile.kind === 'mirror' && !tile.auto));
+    expect(turnable.length).toBeGreaterThan(0);
+  });
+});

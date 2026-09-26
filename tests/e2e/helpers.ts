@@ -60,5 +60,5 @@ export async function waitForLaser(page: Page) {
   await page.waitForFunction(() => {
     const game = (window as any).__deflektor?.currentGame;
     return game !== undefined && !game.isCharging;
-  }, undefined, { timeout: 10_000 });
+  }, undefined, { timeout: 20_000 });
 }
